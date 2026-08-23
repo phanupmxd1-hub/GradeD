@@ -23,8 +23,11 @@ import {
   Upload,
   Image as ImageIcon,
   Building2,
-  X as CloseIcon
+  X as CloseIcon,
+  Type,
+  Check
 } from "lucide-react";
+import { useTheme } from "@/components/providers/ThemeProvider";
 
 export default function SettingsPage() {
   const {
@@ -61,6 +64,7 @@ export default function SettingsPage() {
   } = useGMSStore();
 
   const { user, updateProfile } = useAuth();
+  const { font, setFont } = useTheme();
 
   const [ranges, setRanges] = useState<GradeRange[]>(gradeRules.ranges);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("saved");
@@ -68,6 +72,7 @@ export default function SettingsPage() {
   // System & Branding States
   const [mainTitleInput, setMainTitleInput] = useState(mainTitle || "GradeD Portal");
   const [subTitleInput, setSubTitleInput] = useState(subTitle || "ระบบบันทึกผลการเรียนและเช็คชื่อนักเรียน");
+  const [customFontInput, setCustomFontInput] = useState(font || "Prompt");
   const [teacherNameInput, setTeacherNameInput] = useState(teacherName || "คุณครูผู้สอน");
   const [schoolLogoInput, setSchoolLogoInput] = useState<string | null>(schoolLogo || null);
   const [teacherAvatarInput, setTeacherAvatarInput] = useState<string | null>(teacherAvatar || null);
@@ -541,6 +546,113 @@ export default function SettingsPage() {
                 {isSavingBranding ? "กำลังบันทึก..." : "บันทึกการตั้งค่าระบบและตราสัญลักษณ์"}
               </button>
             </form>
+          </div>
+
+          {/* Google Fonts Setting Card */}
+          <div className="glass rounded-3xl p-6 border border-border flex flex-col shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold flex items-center gap-1.5 text-foreground">
+                <Type className="h-5 w-5 text-emerald-600" />
+                รูปแบบฟอนต์ระบบ (Google Fonts)
+              </h3>
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 rounded-full">
+                Google Fonts
+              </span>
+            </div>
+
+            <p className="text-xs text-muted-foreground mb-4">
+              เลือกฟอนต์ภาษาไทยและภาษาอังกฤษจาก Google Fonts สำหรับแสดงผลทั่วทั้งระบบ
+            </p>
+
+            {/* Current Font Live Preview */}
+            <div className="mb-4 p-3.5 rounded-2xl bg-muted/40 border border-border">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-semibold text-muted-foreground uppercase">ฟอนต์ที่ใช้งานปัจจุบัน</span>
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">{font}</span>
+              </div>
+              <div 
+                className="text-sm font-medium text-foreground p-2.5 rounded-xl bg-background border border-border/60 transition-all"
+                style={{ fontFamily: `'${font}', sans-serif` }}
+              >
+                ยินดีต้อนรับสู่ระบบตัดเกรด GradeD Portal 1234567890 (กขค ABC)
+              </div>
+            </div>
+
+            {/* Preset Google Fonts */}
+            <div className="space-y-1.5 mb-4 max-h-60 overflow-y-auto pr-1">
+              {[
+                { name: "Prompt", desc: "ทางการ ทันสมัย (แนะนำ)", sample: "Prompt ฟอนต์พร้อมทันสมัย" },
+                { name: "Sarabun", desc: "สารบรรณ ทางการ อ่านง่าย", sample: "Sarabun หนังสือราชการ" },
+                { name: "Kanit", desc: "คณิต โมเดิร์น หัวกลม", sample: "Kanit สวยงามทันสมัย" },
+                { name: "Mitr", desc: "มิตร นุ่มนวล สบายตา", sample: "Mitr ตัวหนังสือสบายตา" },
+                { name: "Noto Sans Thai", desc: "Google Noto คมชัดสากล", sample: "Noto Sans Thai คมชัด" },
+                { name: "Chakra Petch", desc: "จักรเพชร โฉบเฉี่ยว เทคโน", sample: "Chakra Petch ทรงเหลี่ยม" },
+                { name: "Bai Jamjuree", desc: "จามจุรี โดดเด่น มีเอกลักษณ์", sample: "Bai Jamjuree ตัวกลมมน" },
+                { name: "IBM Plex Sans Thai", desc: "ไอบีเอ็ม เรียบหรู ชัดเจน", sample: "IBM Plex Sans ชัดเจน" },
+                { name: "Anuphan", desc: "อนุพันธ์ มินิมอล ร่วมสมัย", sample: "Anuphan มินิมอลเรียบง่าย" },
+                { name: "Krub", desc: "ครับ สะอาด เรียบร้อย", sample: "Krub ฟอนต์ครับอ่านง่าย" },
+                { name: "Inter", desc: "อินเตอร์ สากล คลีน", sample: "Inter International Font" }
+              ].map((f) => {
+                const isSelected = font === f.name;
+                return (
+                  <button
+                    key={f.name}
+                    type="button"
+                    onClick={() => {
+                      setFont(f.name);
+                      setCustomFontInput(f.name);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-2xl border text-left transition-all ${
+                      isSelected
+                        ? "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/30 font-semibold"
+                        : "border-border bg-background hover:bg-muted/60 text-foreground"
+                    }`}
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold" style={{ fontFamily: `'${f.name}', sans-serif` }}>
+                        {f.name} <span className="text-[10px] font-normal text-muted-foreground">({f.desc})</span>
+                      </span>
+                      <span className="text-[11px] text-muted-foreground/80 mt-0.5" style={{ fontFamily: `'${f.name}', sans-serif` }}>
+                        {f.sample}
+                      </span>
+                    </div>
+                    {isSelected && (
+                      <div className="h-5 w-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                        <Check className="h-3 w-3" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Custom Google Font Input */}
+            <div className="pt-3 border-t border-border">
+              <label className="block text-xs font-bold text-muted-foreground mb-1.5">
+                หรือพิมพ์ระบุชื่อ Google Font:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="เช่น Mali, Itim, Chonburi, Pattaya"
+                  value={customFontInput}
+                  onChange={(e) => setCustomFontInput(e.target.value)}
+                  className="flex-1 rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customFontInput.trim()) {
+                      setFont(customFontInput.trim());
+                      alert(`เปลี่ยนฟอนต์ระบบเป็น "${customFontInput.trim()}" เรียบร้อยแล้ว`);
+                    }
+                  }}
+                  className="rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3.5 py-2 transition-all active:scale-95 shadow-sm"
+                >
+                  ปรับใช้
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Teacher Profile Card */}

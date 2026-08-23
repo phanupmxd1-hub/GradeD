@@ -121,7 +121,12 @@
   box-sizing: border-box;
 }
 
+:root {
+  --font-app: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 body {
+  font-family: var(--font-app);
   background-color: var(--background);
   color: var(--foreground);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";

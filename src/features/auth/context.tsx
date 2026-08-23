@@ -120,18 +120,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    // 1. Always check persistent localStorage session first
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("gms_session");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.email) {
+            setUser(parsed);
+            setLoading(false);
+          }
+        } catch (e) {}
+      }
+    }
+
     if (useMock) {
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("gms_session");
-        if (stored) {
-          try {
-            setUser(JSON.parse(stored));
-          } catch (e) {
-            setUser(MOCK_TEACHER);
-            localStorage.setItem("gms_session", JSON.stringify(MOCK_TEACHER));
-          }
-        } else {
-          // Standalone auto-login: Anyone with the link gets instant access
+        if (!stored) {
           setUser(MOCK_TEACHER);
           localStorage.setItem("gms_session", JSON.stringify(MOCK_TEACHER));
         }
@@ -142,16 +148,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // Supabase Auth State Change Listener
+    // 2. Supabase Auth State Change Listener (Supplements table session)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
           await fetchUserProfile(session.user);
         } else {
-          setUser(null);
+          // If no supabase auth session, retain persistent table session if available
           if (typeof window !== "undefined") {
-            localStorage.removeItem("gms_session");
+            const stored = localStorage.getItem("gms_session");
+            if (stored) {
+              try {
+                const parsed = JSON.parse(stored);
+                if (parsed && parsed.email) {
+                  setUser(parsed);
+                  setLoading(false);
+                  return;
+                }
+              } catch (e) {}
+            }
           }
+          setUser(null);
           setLoading(false);
         }
       }

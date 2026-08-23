@@ -18,7 +18,12 @@ import {
   Trash2,
   Edit2,
   User,
-  Calendar
+  Calendar,
+  Sparkles,
+  Upload,
+  Image as ImageIcon,
+  Building2,
+  X as CloseIcon
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -45,13 +50,79 @@ export default function SettingsPage() {
     semesters,
     addAcademicYear,
     updateAcademicYear,
-    deleteAcademicYear
+    deleteAcademicYear,
+    mainTitle,
+    subTitle,
+    teacherName,
+    teacherAvatar,
+    schoolLogo,
+    updateSystemSettings,
+    saveAccountData
   } = useGMSStore();
 
   const { user, updateProfile } = useAuth();
 
   const [ranges, setRanges] = useState<GradeRange[]>(gradeRules.ranges);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("saved");
+
+  // System & Branding States
+  const [mainTitleInput, setMainTitleInput] = useState(mainTitle || "GradeD Portal");
+  const [subTitleInput, setSubTitleInput] = useState(subTitle || "ระบบบันทึกผลการเรียนและเช็คชื่อนักเรียน");
+  const [teacherNameInput, setTeacherNameInput] = useState(teacherName || "คุณครูผู้สอน");
+  const [schoolLogoInput, setSchoolLogoInput] = useState<string | null>(schoolLogo || null);
+  const [teacherAvatarInput, setTeacherAvatarInput] = useState<string | null>(teacherAvatar || null);
+  const [isSavingBranding, setIsSavingBranding] = useState(false);
+
+  React.useEffect(() => {
+    setMainTitleInput(mainTitle || "GradeD Portal");
+    setSubTitleInput(subTitle || "ระบบบันทึกผลการเรียนและเช็คชื่อนักเรียน");
+    setTeacherNameInput(teacherName || "คุณครูผู้สอน");
+    setSchoolLogoInput(schoolLogo || null);
+    setTeacherAvatarInput(teacherAvatar || null);
+  }, [mainTitle, subTitle, teacherName, schoolLogo, teacherAvatar]);
+
+  // Image to Base64 Handler
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, field: "schoolLogo" | "teacherAvatar") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 3 * 1024 * 1024) {
+      alert("กรุณาเลือกไฟล์ภาพขนาดไม่เกิน 3MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      if (field === "schoolLogo") {
+        setSchoolLogoInput(base64String);
+      } else {
+        setTeacherAvatarInput(base64String);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveBranding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingBranding(true);
+    try {
+      updateSystemSettings({
+        mainTitle: mainTitleInput.trim() || "GradeD Portal",
+        subTitle: subTitleInput.trim() || "",
+        teacherName: teacherNameInput.trim() || "คุณครูผู้สอน",
+        schoolLogo: schoolLogoInput || null,
+        teacherAvatar: teacherAvatarInput || null
+      });
+      await saveAccountData();
+      alert("บันทึกการตั้งค่าระบบและตราสัญลักษณ์สำเร็จ");
+    } catch (err) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+    } finally {
+      setIsSavingBranding(false);
+    }
+  };
 
   // Teacher Profile States
   const [teacherFirstName, setTeacherFirstName] = useState(user?.firstName || "");
@@ -310,6 +381,156 @@ export default function SettingsPage() {
         {/* Left Column: Configuration Cards */}
         <div className="space-y-6 lg:col-span-1">
           
+          {/* System & Branding Settings Card */}
+          <div className="glass rounded-3xl p-6 border border-border flex flex-col shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold flex items-center gap-1.5 text-foreground">
+                <Sparkles className="h-5 w-5 text-emerald-600" />
+                ชื่อระบบและตราสัญลักษณ์
+              </h3>
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 rounded-full">
+                Base64 Image
+              </span>
+            </div>
+
+            <form onSubmit={handleSaveBranding} className="space-y-4">
+              {/* Main Title */}
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อระบบหลัก (Main Title)</label>
+                <input
+                  type="text"
+                  placeholder="เช่น GradeD Portal"
+                  value={mainTitleInput}
+                  onChange={(e) => setMainTitleInput(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              {/* Subtitle */}
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">คำบรรยายระบบ (Subtitle)</label>
+                <input
+                  type="text"
+                  placeholder="เช่น ระบบบันทึกผลการเรียนและเช็คชื่อ"
+                  value={subTitleInput}
+                  onChange={(e) => setSubTitleInput(e.target.value)}
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              {/* Teacher Display Name */}
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อครูผู้สอนที่แสดงบนระบบ</label>
+                <input
+                  type="text"
+                  placeholder="เช่น คุณครูผู้สอน หรือ ครูสมชาย"
+                  value={teacherNameInput}
+                  onChange={(e) => setTeacherNameInput(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              {/* School Logo (Base64) */}
+              <div className="pt-2 border-t border-border/80">
+                <label className="block text-xs font-bold text-muted-foreground mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Building2 className="h-3.5 w-3.5 text-emerald-600" />
+                    โลโก้โรงเรียน (Base64)
+                  </span>
+                  {schoolLogoInput && (
+                    <button
+                      type="button"
+                      onClick={() => setSchoolLogoInput(null)}
+                      className="text-[10px] text-red-500 hover:underline flex items-center gap-0.5"
+                    >
+                      <CloseIcon className="h-3 w-3" /> ลบรูป
+                    </button>
+                  )}
+                </label>
+                
+                <div className="flex items-center gap-3">
+                  {schoolLogoInput ? (
+                    <img
+                      src={schoolLogoInput}
+                      alt="School Logo Preview"
+                      className="h-12 w-12 rounded-2xl object-contain bg-muted/40 p-1 border border-border shadow-sm"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-2xl bg-muted/40 border border-dashed border-border flex items-center justify-center text-muted-foreground">
+                      <ImageIcon className="h-5 w-5 opacity-40" />
+                    </div>
+                  )}
+
+                  <label className="flex-1 flex items-center justify-center gap-1.5 rounded-2xl border border-border/90 bg-muted/30 hover:bg-muted/60 py-2 px-3 text-xs font-medium text-foreground cursor-pointer transition-colors">
+                    <Upload className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>{schoolLogoInput ? "เปลี่ยนรูปโลโก้" : "อัปโหลดรูปโลโก้"}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, "schoolLogo")}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Teacher Avatar (Base64) */}
+              <div className="pt-2 border-t border-border/80">
+                <label className="block text-xs font-bold text-muted-foreground mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <User className="h-3.5 w-3.5 text-emerald-600" />
+                    โลโก้ / รูปโปรไฟล์ครูผู้สอน (Base64)
+                  </span>
+                  {teacherAvatarInput && (
+                    <button
+                      type="button"
+                      onClick={() => setTeacherAvatarInput(null)}
+                      className="text-[10px] text-red-500 hover:underline flex items-center gap-0.5"
+                    >
+                      <CloseIcon className="h-3 w-3" /> ลบรูป
+                    </button>
+                  )}
+                </label>
+                
+                <div className="flex items-center gap-3">
+                  {teacherAvatarInput ? (
+                    <img
+                      src={teacherAvatarInput}
+                      alt="Teacher Avatar Preview"
+                      className="h-12 w-12 rounded-full object-cover border border-emerald-500/30 shadow-sm"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-muted/40 border border-dashed border-border flex items-center justify-center text-muted-foreground">
+                      <User className="h-5 w-5 opacity-40" />
+                    </div>
+                  )}
+
+                  <label className="flex-1 flex items-center justify-center gap-1.5 rounded-2xl border border-border/90 bg-muted/30 hover:bg-muted/60 py-2 px-3 text-xs font-medium text-foreground cursor-pointer transition-colors">
+                    <Upload className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>{teacherAvatarInput ? "เปลี่ยนรูปโปรไฟล์" : "อัปโหลดรูปโปรไฟล์"}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, "teacherAvatar")}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSavingBranding}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-xs font-semibold text-white hover:bg-emerald-500 active:scale-[0.98] transition-all shadow-md shadow-emerald-600/15 disabled:opacity-55"
+              >
+                <Save className="h-4 w-4" />
+                {isSavingBranding ? "กำลังบันทึก..." : "บันทึกการตั้งค่าระบบและตราสัญลักษณ์"}
+              </button>
+            </form>
+          </div>
+
           {/* Teacher Profile Card */}
           <div className="glass rounded-3xl p-6 border border-border flex flex-col">
             <div className="flex items-center justify-between mb-4">

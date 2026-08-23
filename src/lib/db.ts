@@ -193,6 +193,12 @@ export function loadAllDataFromDb() {
   const activeClassroomId = db.prepare("SELECT value FROM system_state WHERE key = 'activeClassroomId'").get() as { value: string } | undefined;
   const activeSubjectId = db.prepare("SELECT value FROM system_state WHERE key = 'activeSubjectId'").get() as { value: string } | undefined;
 
+  const mainTitle = db.prepare("SELECT value FROM system_state WHERE key = 'mainTitle'").get() as { value: string } | undefined;
+  const subTitle = db.prepare("SELECT value FROM system_state WHERE key = 'subTitle'").get() as { value: string } | undefined;
+  const teacherName = db.prepare("SELECT value FROM system_state WHERE key = 'teacherName'").get() as { value: string } | undefined;
+  const teacherAvatar = db.prepare("SELECT value FROM system_state WHERE key = 'teacherAvatar'").get() as { value: string } | undefined;
+  const schoolLogo = db.prepare("SELECT value FROM system_state WHERE key = 'schoolLogo'").get() as { value: string } | undefined;
+
   const schools = db.prepare("SELECT * FROM schools").all();
   const academicYears = db.prepare("SELECT * FROM academic_years").all();
   const semesters = db.prepare("SELECT * FROM semesters").all();
@@ -215,6 +221,11 @@ export function loadAllDataFromDb() {
     activeSemesterId: activeSemesterId?.value || null,
     activeClassroomId: activeClassroomId?.value || null,
     activeSubjectId: activeSubjectId?.value || null,
+    mainTitle: mainTitle?.value || "GradeD Portal",
+    subTitle: subTitle?.value || "ระบบบันทึกผลการเรียนและเช็คชื่อนักเรียน",
+    teacherName: teacherName?.value || "คุณครูผู้สอน",
+    teacherAvatar: teacherAvatar?.value || null,
+    schoolLogo: schoolLogo?.value || null,
     schools,
     academicYears,
     semesters,
@@ -363,6 +374,12 @@ export function saveAllDataToDb(data: any) {
     if (data.activeSemesterId) upsertState.run("activeSemesterId", data.activeSemesterId);
     if (data.activeClassroomId) upsertState.run("activeClassroomId", data.activeClassroomId);
     if (data.activeSubjectId) upsertState.run("activeSubjectId", data.activeSubjectId);
+
+    if (data.mainTitle) upsertState.run("mainTitle", data.mainTitle);
+    if (data.subTitle) upsertState.run("subTitle", data.subTitle);
+    if (data.teacherName) upsertState.run("teacherName", data.teacherName);
+    if (data.teacherAvatar !== undefined) upsertState.run("teacherAvatar", data.teacherAvatar || "");
+    if (data.schoolLogo !== undefined) upsertState.run("schoolLogo", data.schoolLogo || "");
 
     // 2. Schools UPSERT
     if (Array.isArray(data.schools)) {

@@ -323,6 +323,18 @@ interface GMSState {
   addAuditLog: (action: AuditLog["action"], resourceType: string, resourceId: string, description: string) => void;
   
   // Settings
+  mainTitle: string;
+  subTitle: string;
+  teacherName: string;
+  teacherAvatar: string | null;
+  schoolLogo: string | null;
+  updateSystemSettings: (settings: {
+    mainTitle?: string;
+    subTitle?: string;
+    teacherName?: string;
+    teacherAvatar?: string | null;
+    schoolLogo?: string | null;
+  }) => void;
   updateGradeRules: (ranges: GradeRange[]) => void;
   addClassroom: (name: string, teacherId?: string) => void;
   updateClassroom: (classroom: Classroom) => void;
@@ -508,6 +520,11 @@ const createDefaultInitialState = () => {
     activeSemesterId: "school-1_2569_1",
     activeClassroomId: "class-m1-1",
     activeSubjectId: "sub-sci",
+    mainTitle: "GradeD Portal",
+    subTitle: "ระบบบันทึกผลการเรียนและเช็คชื่อนักเรียน",
+    teacherName: "คุณครูผู้สอน",
+    teacherAvatar: null,
+    schoolLogo: null,
     schools: [defaultSchool],
     users: [],
     academicYears: defaultAcademicYears,
@@ -600,6 +617,11 @@ export const useGMSStore = create<GMSState>()(
             activeSemesterId: state.activeSemesterId,
             activeClassroomId: state.activeClassroomId,
             activeSubjectId: state.activeSubjectId,
+            mainTitle: state.mainTitle,
+            subTitle: state.subTitle,
+            teacherName: state.teacherName,
+            teacherAvatar: state.teacherAvatar,
+            schoolLogo: state.schoolLogo,
             schools: state.schools,
             academicYears: state.academicYears,
             semesters: state.semesters,
@@ -1582,7 +1604,16 @@ export const useGMSStore = create<GMSState>()(
               }
             ]
           };
-        })
+        }),
+
+        updateSystemSettings: (settings) => set((state) => ({
+          ...state,
+          mainTitle: settings.mainTitle !== undefined ? settings.mainTitle : state.mainTitle,
+          subTitle: settings.subTitle !== undefined ? settings.subTitle : state.subTitle,
+          teacherName: settings.teacherName !== undefined ? settings.teacherName : state.teacherName,
+          teacherAvatar: settings.teacherAvatar !== undefined ? settings.teacherAvatar : state.teacherAvatar,
+          schoolLogo: settings.schoolLogo !== undefined ? settings.schoolLogo : state.schoolLogo
+        }))
       };
     }
 );

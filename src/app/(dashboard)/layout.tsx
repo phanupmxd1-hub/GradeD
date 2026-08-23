@@ -74,7 +74,12 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     syncStatus,
     syncError,
     lastSavedTime,
-    saveAccountData
+    saveAccountData,
+    mainTitle,
+    subTitle,
+    teacherName,
+    teacherAvatar,
+    schoolLogo
   } = useGMSStore();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -126,13 +131,22 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       {/* Sidebar - Desktop */}
       <aside className="hidden w-72 border-r border-border bg-card/65 backdrop-blur-md lg:flex flex-col shrink-0">
         {/* Sidebar Header */}
-        <div className="flex h-16 items-center gap-2 px-6 border-b border-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-500/25">
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="font-bold tracking-tight text-foreground text-base">GradeD Portal</span>
-            <span className="ml-1 text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-1.5 py-0.5 rounded-full">v2.0</span>
+        <div className="flex h-20 items-center gap-3 px-5 border-b border-border">
+          {schoolLogo ? (
+            <img src={schoolLogo} alt="Logo" className="h-11 w-11 rounded-2xl object-contain bg-muted/40 p-1 border border-border shadow-sm shrink-0" />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-500/25 shrink-0">
+              <Sparkles className="h-5 w-5" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold tracking-tight text-foreground text-base truncate">{mainTitle || "GradeD Portal"}</span>
+              <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.5 rounded-full shrink-0">v2.0</span>
+            </div>
+            {subTitle && (
+              <p className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5" title={subTitle}>{subTitle}</p>
+            )}
           </div>
         </div>
 
@@ -161,11 +175,15 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         {/* Sidebar Footer */}
         <div className="p-4 border-t border-border bg-muted/30">
           <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/10">
-              {user?.firstName ? user.firstName[0] : <UserIcon className="h-5 w-5" />}
-            </div>
+            {teacherAvatar ? (
+              <img src={teacherAvatar} alt="Teacher" className="h-10 w-10 rounded-full object-cover border border-emerald-500/30 shadow-sm shrink-0" />
+            ) : (
+              <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/10 shrink-0">
+                {teacherName ? teacherName[0] : user?.firstName ? user.firstName[0] : <UserIcon className="h-5 w-5" />}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate text-foreground">{user?.firstName} {user?.lastName}</p>
+              <p className="text-sm font-semibold truncate text-foreground">{teacherName || `${user?.firstName || "คุณครู"} ${user?.lastName || ""}`}</p>
               <p className="text-xs text-muted-foreground truncate uppercase tracking-wider font-semibold">
                 {user?.role === "teacher" ? "คุณครูผู้สอน" : "ผู้ดูแลระบบ"}
               </p>
@@ -186,11 +204,18 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-50 flex lg:hidden bg-background/80 backdrop-blur-sm">
           <div className="relative flex w-full max-w-xs flex-col bg-card p-6 shadow-2xl border-r border-border animate-in slide-in-from-left duration-200">
             <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white">
-                  <Sparkles className="h-5 w-5" />
+              <div className="flex items-center gap-2.5">
+                {schoolLogo ? (
+                  <img src={schoolLogo} alt="Logo" className="h-9 w-9 rounded-xl object-contain bg-muted/40 p-0.5 border border-border" />
+                ) : (
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                )}
+                <div>
+                  <span className="font-bold tracking-tight text-foreground text-base truncate block">{mainTitle || "GradeD Portal"}</span>
+                  {subTitle && <span className="text-[10px] text-muted-foreground block truncate">{subTitle}</span>}
                 </div>
-                <span className="font-bold tracking-tight text-foreground text-base">GradeD Portal</span>
               </div>
               <button 
                 onClick={() => setSidebarOpen(false)}

@@ -60,6 +60,9 @@ async function initAndPush() {
   });
   console.log("Commit created:", sha);
 
+  await git.branch({ fs, dir, ref: "main", object: sha, force: true });
+  await git.writeRef({ fs, dir, ref: "refs/heads/main", value: sha, force: true });
+
   console.log("4. Setting remote origin:", url);
   try {
     await git.addRemote({ fs, dir, remote: "origin", url, force: true });

@@ -3,6 +3,17 @@
 import { create } from "zustand";
 import { supabase } from "@/lib/supabase/client";
 
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // Global cache for tracking raw database state differences (avoids infinite save loops)
 let _lastSerializedData = "";
 
@@ -875,13 +886,15 @@ export const useGMSStore = create<GMSState>()(
 
               // Save academic years
               if (state.academicYears && state.academicYears.length > 0) {
+                const defaultSchoolId = state.activeSchoolId || state.schools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49";
                 const yearRows = state.academicYears.map(y => ({
                   id: y.id,
-                  school_id: y.schoolId,
+                  school_id: y.schoolId && y.schoolId !== "school-1" ? y.schoolId : defaultSchoolId,
                   year: Number(y.year),
                   status: y.status || "active"
                 }));
-                await supabase.from("academic_years").upsert(yearRows, { onConflict: "id" });
+                const { error: ayErr } = await supabase.from("academic_years").upsert(yearRows, { onConflict: "id" });
+                if (ayErr) console.error("Academic years save error:", ayErr);
               }
 
               // Save semesters
@@ -892,7 +905,8 @@ export const useGMSStore = create<GMSState>()(
                   semester_no: Number(s.semesterNo),
                   status: s.status || "active"
                 }));
-                await supabase.from("semesters").upsert(semRows, { onConflict: "id" });
+                const { error: semErr } = await supabase.from("semesters").upsert(semRows, { onConflict: "id" });
+                if (semErr) console.error("Semesters save error:", semErr);
               }
 
               // Save classrooms
@@ -1874,11 +1888,12 @@ export const useGMSStore = create<GMSState>()(
         })),
 
         addClassroom: (name, teacherId) => set((state) => {
-          const newId = `class-${Date.now()}`;
+          const schoolId = state.activeSchoolId || state.schools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49";
+          const newId = generateUUID();
           const newClassroom: Classroom = {
             id: newId,
-            schoolId: state.activeSchoolId,
-            academicYearId: state.activeAcademicYearId,
+            schoolId,
+            academicYearId: state.activeAcademicYearId || state.academicYears[0]?.id,
             name,
             teacherId: teacherId || "mock-teacher-id-1",
             studentCount: 0
@@ -1921,6 +1936,9 @@ export const useGMSStore = create<GMSState>()(
           const target = state.classrooms.find(c => c.id === id);
           const remainingClassrooms = state.classrooms.filter(c => c.id !== id);
           const newActiveId = state.activeClassroomId === id ? (remainingClassrooms[0]?.id || "") : state.activeClassroomId;
+          try {
+            supabase.from("classrooms").delete().eq("id", id).then();
+          } catch (e) {}
           return {
             classrooms: remainingClassrooms,
             students: state.students.filter(s => s.classroomId !== id),
@@ -1941,10 +1959,13 @@ export const useGMSStore = create<GMSState>()(
         }),
 
         addAcademicYear: (year) => set((state) => {
-          const id = `school-1_${year}`;
-          const newYear: AcademicYear = { id, schoolId: "school-1", year, status: "active" };
-          const sem1: Semester = { id: `${id}_1`, academicYearId: id, semesterNo: 1, status: "active" };
-          const sem2: Semester = { id: `${id}_2`, academicYearId: id, semesterNo: 2, status: "closed" };
+          const schoolId = state.activeSchoolId || state.schools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49";
+          const id = generateUUID();
+          const sem1Id = generateUUID();
+          const sem2Id = generateUUID();
+          const newYear: AcademicYear = { id, schoolId, year: Number(year), status: "active" };
+          const sem1: Semester = { id: sem1Id, academicYearId: id, semesterNo: 1, status: "active" };
+          const sem2: Semester = { id: sem2Id, academicYearId: id, semesterNo: 2, status: "closed" };
 
           return {
             academicYears: [...state.academicYears, newYear],
@@ -1955,7 +1976,7 @@ export const useGMSStore = create<GMSState>()(
         }),
 
         updateAcademicYear: (id, year) => set((state) => ({
-          academicYears: state.academicYears.map(ay => ay.id === id ? { ...ay, year } : ay)
+          academicYears: state.academicYears.map(ay => ay.id === id ? { ...ay, year: Number(year) } : ay)
         })),
 
         deleteAcademicYear: (id) => set((state) => {
@@ -1979,6 +2000,11 @@ export const useGMSStore = create<GMSState>()(
             newActiveClassroomId = remainingClassrooms.length > 0 ? remainingClassrooms[0].id : "";
           }
 
+          try {
+            supabase.from("academic_years").delete().eq("id", id).then();
+            supabase.from("semesters").delete().eq("academic_year_id", id).then();
+          } catch (e) {}
+
           return {
             academicYears: remainingYears,
             semesters: state.semesters.filter(s => s.academicYearId !== id),
@@ -1990,14 +2016,15 @@ export const useGMSStore = create<GMSState>()(
         }),
 
         addSubject: (code, name, creditPoints, hoursPerWeek) => set((state) => {
-          const newId = `sub-${Date.now()}`;
+          const schoolId = state.activeSchoolId || state.schools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49";
+          const newId = generateUUID();
           const newSubject: Subject = {
             id: newId,
-            schoolId: state.activeSchoolId,
+            schoolId,
             code,
             name,
-            creditPoints,
-            hoursPerWeek
+            creditPoints: Number(creditPoints),
+            hoursPerWeek: Number(hoursPerWeek)
           };
           return {
             subjects: [...state.subjects, newSubject],
@@ -2035,6 +2062,9 @@ export const useGMSStore = create<GMSState>()(
 
         deleteSubject: (id) => set((state) => {
           const target = state.subjects.find(s => s.id === id);
+          try {
+            supabase.from("subjects").delete().eq("id", id).then();
+          } catch (e) {}
           return {
             subjects: state.subjects.filter(s => s.id !== id),
             auditLogs: [

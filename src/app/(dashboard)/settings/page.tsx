@@ -248,7 +248,7 @@ export default function SettingsPage() {
     setIsEditYearOpen(true);
   };
 
-  const handleSaveYear = (e: React.FormEvent) => {
+  const handleSaveYear = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!yearInput.trim()) return;
     const yearNum = parseInt(yearInput.trim());
@@ -257,21 +257,21 @@ export default function SettingsPage() {
     if (isAddYearOpen) {
       addAcademicYear(yearNum);
       setIsAddYearOpen(false);
-      saveAccountData();
-      alert("เพิ่มปีการศึกษาใหม่สำเร็จ");
+      await saveAccountData();
+      alert(`เพิ่มปีการศึกษา ${yearNum} และบันทึกลงใน Supabase เรียบร้อยแล้ว`);
     } else if (isEditYearOpen && editingYear) {
       updateAcademicYear(editingYear.id, yearNum);
       setIsEditYearOpen(false);
       setEditingYear(null);
-      saveAccountData();
-      alert("แก้ไขข้อมูลปีการศึกษาสำเร็จ");
+      await saveAccountData();
+      alert(`แก้ไขข้อมูลปีการศึกษา ${yearNum} และบันทึกลงใน Supabase เรียบร้อยแล้ว`);
     }
   };
 
-  const handleDeleteYear = (id: string, year: number) => {
+  const handleDeleteYear = async (id: string, year: number) => {
     if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบปีการศึกษา "${year}"? ข้อมูลที่เกี่ยวข้องทั้งหมดจะถูกลบ`)) {
       deleteAcademicYear(id);
-      saveAccountData();
+      await saveAccountData();
       alert("ลบปีการศึกษาเรียบร้อยแล้ว");
     }
   };

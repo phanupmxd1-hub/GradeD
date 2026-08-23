@@ -11,7 +11,7 @@ async function initAndPush() {
   console.log("1. Initializing Git repository in", dir);
   await git.init({ fs, dir });
 
-  console.log("2. Staging all files...");
+  console.log("2. Staging all files and removing deleted files...");
   
   // Recursive add files respecting gitignore
   const ignorePatterns = [
@@ -35,18 +35,32 @@ async function initAndPush() {
       if (entry.isDirectory()) {
         files = files.concat(getAllFiles(fullPath, rel));
       } else {
-        files.push(rel);
+        files.push(rel.replace(/\\/g, "/"));
       }
     }
     return files;
   }
 
   const filesToAdd = getAllFiles(dir);
-  console.log(`Found ${filesToAdd.length} files to commit.`);
+  console.log(`Found ${filesToAdd.length} current files to commit.`);
 
+  // 1. Stage existing files
   for (const file of filesToAdd) {
     await git.add({ fs, dir, filepath: file });
   }
+
+  // 2. Remove deleted files from Git index (e.g. deleted firebase folder)
+  const matrix = await git.statusMatrix({ fs, dir });
+  let removedCount = 0;
+  for (const [filepath, head, workdir, stage] of matrix) {
+    // If head exists (1) and workdir is missing (0) or stage is 0
+    if (head === 1 && workdir === 0) {
+      console.log("Removing deleted file from Git:", filepath);
+      await git.remove({ fs, dir, filepath });
+      removedCount++;
+    }
+  }
+  console.log(`Removed ${removedCount} deleted files from Git.`);
 
   console.log("3. Creating commit...");
   const sha = await git.commit({
@@ -56,7 +70,7 @@ async function initAndPush() {
       name: "phanupmxd1-hub",
       email: "phanupmxd1@users.noreply.github.com"
     },
-    message: "Initial commit: GradeD Portal with SQLite, Supabase migrations, and Next.js"
+    message: "Remove Firebase completely, use pure Supabase with full table sync"
   });
   console.log("Commit created:", sha);
 
@@ -83,6 +97,7 @@ async function initAndPush() {
     dir,
     remote: "origin",
     ref: "main",
+    force: true,
     onAuth: () => ({
       username: "phanupmxd1-hub",
       password: token

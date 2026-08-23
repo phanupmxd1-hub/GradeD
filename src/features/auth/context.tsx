@@ -181,7 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           password === "123456"
         ) {
           const adminUser: AppUser = {
-            id: "admin-system-id-1",
+            id: "fd77bcdc-8d2a-4b27-a827-989b1eb151bc",
             email: "admin@graded.com",
             role: "system_admin",
             schoolId: "f35acdc8-233d-b572-eedf-8f6d7da0ef49",
@@ -198,7 +198,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 2. Local Users DB & Standalone user login
+      // 2. Query Supabase profiles table directly to check email & password
+      try {
+        const { data: profiles, error: profErr } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("email", normalizedEmail);
+
+        if (profiles && profiles.length > 0) {
+          const userProfile = profiles[0];
+          // Check stored password in avatar_url column
+          if (userProfile.avatar_url && userProfile.avatar_url !== password) {
+            throw new Error("รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง");
+          }
+
+          const appUser: AppUser = {
+            id: userProfile.id,
+            email: userProfile.email,
+            role: userProfile.role || "teacher",
+            schoolId: userProfile.school_id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49",
+            firstName: userProfile.first_name || "ครู",
+            lastName: userProfile.last_name || "ผู้สอน"
+          };
+
+          setUser(appUser);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("gms_session", JSON.stringify(appUser));
+          }
+          return;
+        }
+      } catch (err: any) {
+        if (err.message && err.message.includes("รหัสผ่านไม่ถูกต้อง")) {
+          throw err;
+        }
+        console.warn("Supabase profiles query error:", err);
+      }
+
+      // 3. Fallback to Local Users DB
       const dbUsers = getLocalUsersDb();
       const existing = dbUsers[normalizedEmail];
 
@@ -212,22 +248,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem("gms_session", JSON.stringify(cleanUser));
         }
         return;
-      }
-
-      // 3. Supabase Auth (if online user registered via Supabase)
-      if (!useMock) {
-        try {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: normalizedEmail,
-            password,
-          });
-          if (!error && data?.user) {
-            await fetchUserProfile(data.user);
-            return;
-          }
-        } catch (sbErr) {
-          console.warn("Supabase auth check:", sbErr);
-        }
       }
 
       // 4. Default instant user fallback
@@ -257,41 +277,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     setLoading(true);
     try {
-      if (useMock) {
-        const dbUsers = getLocalUsersDb();
-        const normalizedEmail = email.toLowerCase().trim();
-        if (dbUsers[normalizedEmail]) {
-          throw new Error("อีเมลนี้ถูกใช้งานลงทะเบียนในระบบแล้ว");
-        }
-        const newUser: AppUser & { password?: string } = {
-          id: `usr-${Date.now()}`,
-          email: normalizedEmail,
-          role,
-          schoolId: "a0000000-0000-0000-0000-000000000001",
-          firstName,
-          lastName,
-          password
-        };
-        dbUsers[normalizedEmail] = newUser;
-        saveLocalUsersDb(dbUsers);
+      const normalizedEmail = email.toLowerCase().trim();
 
-        const { password: _, ...cleanUser } = newUser;
-        setUser(cleanUser);
-        localStorage.setItem("gms_session", JSON.stringify(cleanUser));
-      } else {
-        // Secure SignUp: Send metadata, role is forced to teacher by Postgres Trigger
-        const { error } = await supabase.auth.signUp({
-          email,
+      // 1. Check if user already exists in Supabase profiles
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("email", normalizedEmail);
+
+      if (existing && existing.length > 0) {
+        throw new Error("อีเมลนี้ถูกใช้งานลงทะเบียนในระบบแล้ว กรุณาเข้าสู่ระบบ");
+      }
+
+      // 2. Register via Supabase Auth (or generate deterministic user id)
+      let userId = `usr-${Date.now()}`;
+      try {
+        const { data: sbData } = await supabase.auth.signUp({
+          email: normalizedEmail,
           password,
           options: {
             data: {
               first_name: firstName,
               last_name: lastName,
-              school_id: "a0000000-0000-0000-0000-000000000001"
+              role
             }
           }
         });
-        if (error) throw error;
+        if (sbData?.user?.id) {
+          userId = sbData.user.id;
+        }
+      } catch (e) {
+        console.warn("Supabase auth signUp:", e);
+      }
+
+      // 3. Save directly to Supabase profiles table (including password in avatar_url)
+      const userProfileRow = {
+        id: userId,
+        email: normalizedEmail,
+        first_name: firstName,
+        last_name: lastName,
+        role,
+        avatar_url: password // Store password in Supabase profiles
+      };
+
+      try {
+        await supabase
+          .from("profiles")
+          .upsert([userProfileRow]);
+      } catch (e) {
+        console.warn("Profile save to Supabase:", e);
+      }
+
+      const appUser: AppUser = {
+        id: userId,
+        email: normalizedEmail,
+        role: (role === "school_admin" ? "school_admin" : "teacher"),
+        schoolId: "f35acdc8-233d-b572-eedf-8f6d7da0ef49",
+        firstName,
+        lastName
+      };
+
+      setUser(appUser);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("gms_session", JSON.stringify(appUser));
+        
+        const dbUsers = getLocalUsersDb();
+        dbUsers[normalizedEmail] = { ...appUser, password };
+        saveLocalUsersDb(dbUsers);
       }
     } finally {
       setLoading(false);

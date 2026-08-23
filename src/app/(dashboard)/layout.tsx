@@ -1,0 +1,512 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { useAuth } from "@/features/auth/context";
+import { useTheme } from "@/components/providers/ThemeProvider";
+import { RouteGuard } from "@/components/shared/RouteGuard";
+import { useGMSStore } from "@/lib/store";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { 
+  LayoutDashboard, 
+  Users, 
+  CalendarCheck, 
+  GraduationCap, 
+  Award, 
+  FileSpreadsheet, 
+  Settings as SettingsIcon,
+  LogOut,
+  Sun,
+  Moon,
+  Menu,
+  X,
+  BookOpen,
+  ChevronDown,
+  User as UserIcon,
+  Sparkles,
+  Cloud,
+  CloudOff,
+  Loader2,
+  Check
+} from "lucide-react";
+
+const SIDEBAR_ITEMS = [
+  { name: "สรุปผลระบบ", path: "/dashboard", icon: LayoutDashboard },
+  { name: "จัดการข้อมูลนักเรียน", path: "/students", icon: Users },
+  { name: "เช็คชื่อเข้าเรียน", path: "/attendance", icon: CalendarCheck },
+  { name: "บันทึกคะแนน", path: "/scores", icon: GraduationCap },
+  { name: "คะแนนจิตพิสัย", path: "/bonus", icon: Award },
+  { name: "ออกรายงาน", path: "/reports", icon: FileSpreadsheet },
+  { name: "ตั้งค่าระบบ", path: "/settings", icon: SettingsIcon },
+];
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <RouteGuard>
+      <LayoutContent>{children}</LayoutContent>
+    </RouteGuard>
+  );
+}
+
+function LayoutContent({ children }: { children: React.ReactNode }) {
+  const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // Zustand Store selectors and state
+  const {
+    activeAcademicYearId,
+    activeSemesterId,
+    activeClassroomId,
+    activeSubjectId,
+    academicYears,
+    semesters,
+    classrooms,
+    subjects,
+    setActiveAcademicYearId,
+    setActiveSemesterId,
+    setActiveClassroomId,
+    setActiveSubjectId,
+    calculateGrades,
+    addClassroom,
+    loadAccountData,
+    syncStatus,
+    syncError,
+    lastSavedTime,
+    saveAccountData
+  } = useGMSStore();
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [isAddClassOpen, setIsAddClassOpen] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+
+  // Load account data from Firestore when user changes
+  useEffect(() => {
+    if (user?.email) {
+      loadAccountData(user.email);
+    }
+  }, [user?.email, loadAccountData]);
+
+  // Listen for global Ctrl+S / Cmd+S shortcut to trigger manual Cloud save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveAccountData();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [saveAccountData]);
+
+  // Trigger recalculate grades once when selection changes to keep summaries updated
+  useEffect(() => {
+    if (activeClassroomId && activeSubjectId && activeSemesterId) {
+      calculateGrades();
+    }
+  }, [activeClassroomId, activeSubjectId, activeSemesterId, calculateGrades]);
+
+  // Current selections
+  const currentYear = academicYears.find(y => y.id === activeAcademicYearId);
+  const currentSemester = semesters.find(s => s.id === activeSemesterId);
+  const currentClass = classrooms.find(c => c.id === activeClassroomId);
+  const currentSubject = subjects.find(s => s.id === activeSubjectId);
+
+  // Active path matcher
+  const isActive = (path: string) => pathname.startsWith(path);
+
+  return (
+    <div className="flex min-h-screen bg-background text-foreground transition-colors duration-200">
+      
+      {/* Sidebar - Desktop */}
+      <aside className="hidden w-72 border-r border-border bg-card/65 backdrop-blur-md lg:flex flex-col shrink-0">
+        {/* Sidebar Header */}
+        <div className="flex h-16 items-center gap-2 px-6 border-b border-border">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-500/25">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="font-bold tracking-tight text-foreground text-base">GradeD Portal</span>
+            <span className="ml-1 text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-1.5 py-0.5 rounded-full">v2.0</span>
+          </div>
+        </div>
+
+        {/* Navigation Items */}
+        <nav className="flex-1 space-y-1 px-4 py-6 overflow-y-auto">
+          {SIDEBAR_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.path);
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                className={`flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-2xl transition-all duration-200 group ${
+                  active 
+                    ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/15" 
+                    : "text-muted-foreground hover:bg-emerald-500/5 hover:text-emerald-600 dark:hover:text-emerald-400"
+                }`}
+              >
+                <Icon className={`h-5 w-5 transition-transform duration-200 group-hover:scale-110 ${active ? "text-white" : "text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400"}`} />
+                {item.name}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-border bg-muted/30">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/10">
+              {user?.firstName ? user.firstName[0] : <UserIcon className="h-5 w-5" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate text-foreground">{user?.firstName} {user?.lastName}</p>
+              <p className="text-xs text-muted-foreground truncate uppercase tracking-wider font-semibold">
+                {user?.role === "teacher" ? "คุณครูผู้สอน" : "ผู้ดูแลระบบ"}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => logout()}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border/80 bg-background py-2 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/5 dark:hover:bg-red-500/10 active:scale-[0.98] transition-all"
+          >
+            <LogOut className="h-4 w-4" />
+            ออกจากระบบ
+          </button>
+        </div>
+      </aside>
+
+      {/* Sidebar - Mobile (Drawer) */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden bg-background/80 backdrop-blur-sm">
+          <div className="relative flex w-full max-w-xs flex-col bg-card p-6 shadow-2xl border-r border-border animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <span className="font-bold tracking-tight text-foreground text-base">GradeD Portal</span>
+              </div>
+              <button 
+                onClick={() => setSidebarOpen(false)}
+                className="p-1 rounded-full hover:bg-muted"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <nav className="flex-1 space-y-1">
+              {SIDEBAR_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.path);
+                return (
+                  <Link
+                    key={item.path}
+                    href={item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3.5 text-sm font-medium rounded-2xl transition-all duration-200 ${
+                      active 
+                        ? "bg-emerald-600 text-white" 
+                        : "text-muted-foreground hover:bg-emerald-500/5 hover:text-emerald-600 dark:hover:text-emerald-400"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="pt-4 border-t border-border mt-auto">
+              <button
+                onClick={() => {
+                  setSidebarOpen(false);
+                  logout();
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500/5 border border-red-500/10 py-3 text-sm font-medium text-red-600 dark:text-red-400"
+              >
+                <LogOut className="h-4 w-4" />
+                ออกจากระบบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        
+        {/* Top Navbar */}
+        <header className="glass-nav sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-4">
+            {/* Mobile Hamburger menu */}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 rounded-xl border border-border lg:hidden text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            
+            {/* Context Global Dropdowns Selector (Desktop) */}
+            <div className="hidden lg:flex items-center gap-2 bg-muted/40 p-1 rounded-2xl border border-border/80">
+              
+              {/* Year Dropdown */}
+              <div className="relative group">
+                <select
+                  value={activeAcademicYearId}
+                  onChange={(e) => setActiveAcademicYearId(e.target.value)}
+                  className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                >
+                  {academicYears.map(y => (
+                    <option key={y.id} value={y.id} className="dark:bg-card">ปีการศึกษา {y.year}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              </div>
+              <div className="h-4 w-px bg-border" />
+
+              {/* Semester Dropdown */}
+              <div className="relative group">
+                <select
+                  value={activeSemesterId}
+                  onChange={(e) => setActiveSemesterId(e.target.value)}
+                  className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                >
+                  {semesters.filter(s => s.academicYearId === activeAcademicYearId).map(s => (
+                    <option key={s.id} value={s.id} className="dark:bg-card">ภาคเรียนที่ {s.semesterNo}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              </div>
+              <div className="h-4 w-px bg-border" />
+
+              {/* Classroom Dropdown */}
+              <div className="relative group">
+                <select
+                  value={activeClassroomId}
+                  onChange={(e) => {
+                    if (e.target.value === "ADD_NEW") {
+                      setIsAddClassOpen(true);
+                    } else {
+                      setActiveClassroomId(e.target.value);
+                    }
+                  }}
+                  className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-semibold text-foreground outline-none cursor-pointer"
+                >
+                  {classrooms.filter(c => c.academicYearId === activeAcademicYearId).map(c => (
+                    <option key={c.id} value={c.id} className="dark:bg-card">ห้อง {c.name}</option>
+                  ))}
+                  <option value="ADD_NEW" className="text-emerald-600 font-bold dark:bg-card">+ เพิ่มห้องเรียนใหม่...</option>
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              </div>
+              <div className="h-4 w-px bg-border" />
+
+              {/* Subject Dropdown */}
+              <div className="relative group">
+                <select
+                  value={activeSubjectId}
+                  onChange={(e) => {
+                    if (e.target.value === "ADD_NEW") {
+                      router.push("/settings");
+                    } else {
+                      setActiveSubjectId(e.target.value);
+                    }
+                  }}
+                  className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-semibold text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer"
+                >
+                  {subjects.map(s => (
+                    <option key={s.id} value={s.id} className="dark:bg-card">{s.code} - {s.name}</option>
+                  ))}
+                  <option value="ADD_NEW" className="text-emerald-600 font-bold dark:bg-card">+ เพิ่มวิชาเรียนใหม่...</option>
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+              </div>
+
+            </div>
+
+            {/* Selection indicators on mobile */}
+            <div className="lg:hidden flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-full">
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>ห้อง {currentClass?.name} | {currentSubject?.code}</span>
+            </div>
+          </div>
+
+          {/* Right Header Toolbar */}
+          <div className="flex items-center gap-3">
+            {/* Cloud Sync Button */}
+            <div className="flex flex-col items-end mr-1">
+              <button
+                onClick={() => saveAccountData()}
+                disabled={syncStatus === "saving"}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all duration-200 cursor-pointer ${
+                  syncStatus === "saving"
+                    ? "bg-amber-500/10 border-amber-500/25 text-amber-600 dark:text-amber-400"
+                    : syncStatus === "saved"
+                    ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-600 dark:text-emerald-400"
+                    : syncStatus === "error"
+                    ? "bg-red-500/10 border-red-500/25 text-red-600 dark:text-red-400"
+                    : "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-500 hover:border-emerald-600 shadow-md shadow-emerald-600/15"
+                }`}
+                title="บันทึกขึ้น Cloud ถาวร (คีย์ลัด Ctrl + S)"
+              >
+                {syncStatus === "saving" && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                {syncStatus === "saved" && (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+                {syncStatus === "error" && (
+                  <CloudOff className="h-3.5 w-3.5 animate-bounce" />
+                )}
+                {syncStatus === "idle" && (
+                  <Cloud className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {syncStatus === "saving"
+                    ? "กำลังบันทึก..."
+                    : syncStatus === "saved"
+                    ? "บันทึกสำเร็จ"
+                    : syncStatus === "error"
+                    ? "ล้มเหลว!"
+                    : "บันทึกข้อมูล"}
+                </span>
+              </button>
+              <span className={`text-[10px] mt-1 font-medium ${syncStatus === "error" ? "text-red-500" : "text-muted-foreground"}`}>
+                {syncStatus === "error" && syncError
+                  ? `ข้อผิดพลาด: ${syncError}`
+                  : lastSavedTime
+                  ? `เซฟล่าสุด: ${lastSavedTime}`
+                  : "กดเซฟหรือใช้ Ctrl + S"}
+              </span>
+            </div>
+
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="p-2.5 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted/80 active:scale-95 transition-all"
+              title={theme === "light" ? "เปิดโหมดมืด" : "เปิดโหมดสว่าง"}
+            >
+              {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </button>
+
+            {/* Quick stats: Active class info */}
+            <div className="hidden sm:flex flex-col text-right">
+              <span className="text-xs font-semibold text-muted-foreground">จำนวนนักเรียน</span>
+              <span className="text-sm font-bold text-foreground">{currentClass?.studentCount || 0} คน</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Global Context Mobile Selector Panel (only on Mobile layout) */}
+        <div className="lg:hidden flex flex-wrap gap-2 px-4 py-2 border-b border-border/80 bg-muted/10">
+          <select
+            value={activeAcademicYearId}
+            onChange={(e) => setActiveAcademicYearId(e.target.value)}
+            className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-medium text-foreground cursor-pointer"
+          >
+            {academicYears.map(y => (
+              <option key={y.id} value={y.id}>ปี {y.year}</option>
+            ))}
+          </select>
+          <select
+            value={activeSemesterId}
+            onChange={(e) => setActiveSemesterId(e.target.value)}
+            className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-medium text-foreground cursor-pointer"
+          >
+            {semesters.filter(s => s.academicYearId === activeAcademicYearId).map(s => (
+              <option key={s.id} value={s.id}>เทอม {s.semesterNo}</option>
+            ))}
+          </select>
+          <select
+            value={activeClassroomId}
+            onChange={(e) => {
+              if (e.target.value === "ADD_NEW") {
+                setIsAddClassOpen(true);
+              } else {
+                setActiveClassroomId(e.target.value);
+              }
+            }}
+            className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-medium text-foreground cursor-pointer"
+          >
+            {classrooms.filter(c => c.academicYearId === activeAcademicYearId).map(c => (
+              <option key={c.id} value={c.id}>ห้อง {c.name}</option>
+            ))}
+            <option value="ADD_NEW">+ เพิ่มห้องเรียน...</option>
+          </select>
+          <select
+            value={activeSubjectId}
+            onChange={(e) => {
+              if (e.target.value === "ADD_NEW") {
+                router.push("/settings");
+              } else {
+                setActiveSubjectId(e.target.value);
+              }
+            }}
+            className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-medium text-foreground cursor-pointer"
+          >
+            {subjects.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+            <option value="ADD_NEW">+ เพิ่มวิชาเรียน...</option>
+          </select>
+        </div>
+
+        {/* Dashboard Main Content Scroll Container */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          {children}
+        </main>
+      </div>
+
+      {/* Add Classroom Dialog Modal */}
+      {isAddClassOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4">
+          <div className="glass w-full max-w-sm rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold mb-2 text-foreground">เพิ่มห้องเรียนใหม่</h3>
+            <p className="text-xs text-muted-foreground mb-4">ระบุชื่อห้องเรียนเรียนที่ต้องการสร้างในระบบสำหรับปีการศึกษานี้</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อห้องเรียน (Classroom Name)</label>
+                <input
+                  type="text"
+                  placeholder="เช่น ม.1/3 หรือ ม.2/2"
+                  value={newClassName}
+                  onChange={(e) => setNewClassName(e.target.value)}
+                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-4 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 text-foreground"
+                  autoFocus
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    setIsAddClassOpen(false);
+                    setNewClassName("");
+                  }}
+                  className="rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted text-foreground"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={() => {
+                    if (newClassName.trim()) {
+                      addClassroom(newClassName.trim());
+                      setNewClassName("");
+                      setIsAddClassOpen(false);
+                    }
+                  }}
+                  disabled={!newClassName.trim()}
+                  className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  สร้างห้องเรียน
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

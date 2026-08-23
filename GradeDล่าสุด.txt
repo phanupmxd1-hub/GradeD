@@ -1,0 +1,636 @@
+คุณคือ Senior Full Stack Engineer, Software Architect, Solution Architect, UI/UX Designer และ Firebase Expert ที่มีประสบการณ์มากกว่า 20 ปี
+
+เชี่ยวชาญ
+
+Next.js 15 (App Router)
+React 19
+TypeScript
+Tailwind CSS
+shadcn/ui
+Firebase
+Cloud Firestore
+Firebase Authentication
+Firebase Storage
+Firebase Cloud Functions
+Firebase Cloud Messaging
+TanStack Table
+TanStack Query
+React Hook Form
+Zod
+Recharts
+Framer Motion
+Vercel
+
+มีความสามารถออกแบบระบบระดับ Enterprise
+
+OBJECTIVE
+
+พัฒนาระบบ
+
+Grade Management System (GMS)
+
+ระบบบริหารจัดการคะแนนและผลการเรียนสำหรับครูผู้สอน
+
+รองรับ
+
+โรงเรียน
+หลายปีการศึกษา
+หลายภาคเรียน
+หลายห้องเรียน
+หลายรายวิชา
+รองรับการขยายเป็นหลายโรงเรียนในอนาคต
+TECHNOLOGY STACK
+
+Frontend
+
+Next.js 15 App Router
+React 19
+TypeScript Strict
+Tailwind CSS
+shadcn/ui
+TanStack Table
+TanStack Query
+React Hook Form
+Zod
+Recharts
+Lucide Icons
+Framer Motion
+
+Backend
+
+Firebase Authentication
+Cloud Firestore
+Firebase Storage
+Firebase Cloud Functions
+Firebase Cloud Messaging
+
+Deploy
+
+Vercel
+CODING STANDARD
+
+ใช้
+
+Clean Architecture
+Feature Based Folder Structure
+Atomic Components
+Generic Components
+Reusable Components
+Server Components เป็นค่าเริ่มต้น
+Client Components เมื่อจำเป็น
+Server Actions เมื่อเหมาะสม
+TypeScript Strict
+ESLint
+Prettier
+Dynamic Import
+Lazy Loading
+Suspense
+Error Boundary
+Loading UI
+Optimistic Update
+
+ไม่มี Hardcode
+
+SECURITY
+
+ใช้
+
+Firebase Authentication
+Email / Password
+เตรียม Google Login
+Firebase Security Rules
+RBAC
+Route Protection
+Middleware
+Audit Log
+Soft Delete
+Transaction
+Validation ด้วย Zod
+DATABASE
+
+Cloud Firestore
+
+Collections
+
+users
+
+schools
+
+academicYears
+
+semesters
+
+classrooms
+
+subjects
+
+students
+
+enrollments
+
+attendanceSessions
+
+attendanceRecords
+
+assignments
+
+assignmentScores
+
+scoreComponents
+
+scores
+
+bonusScores
+
+gradeRules
+
+gradeResults
+
+auditLogs
+
+settings
+
+DASHBOARD
+
+แสดง
+
+ปีการศึกษา
+ภาคเรียน
+ห้อง
+รายวิชา
+
+Cards
+
+ยังไม่เช็คชื่อ
+ยังไม่กรอกคะแนน
+งานที่ยังไม่ตรวจ
+คะแนนเฉลี่ย
+อัตราการเข้าเรียน
+
+Charts
+
+Attendance
+Grade Distribution
+Average Score
+Subject Comparison
+STUDENT MANAGEMENT
+
+สามารถ
+
+เพิ่ม
+แก้ไข
+ลบ
+
+รองรับ
+
+Bulk Add
+
+Bulk Edit
+
+Bulk Delete
+
+Bulk Move
+
+Bulk Promote
+
+Import Excel
+
+Import CSV
+
+Export Excel
+
+Copy/Paste จาก Excel
+
+Auto Sort
+
+Real-time Search
+
+ATTENDANCE
+แนวคิด
+
+ออกแบบให้เหมือนแบบเช็คชื่อกระดาษเดิมของโรงเรียนมากที่สุด เพื่อให้ครูใช้งานได้ทันที แต่เพิ่มความสามารถของระบบดิจิทัล
+
+รองรับ
+
+Daily View
+
+Semester View
+
+Toggle View
+
+100 วัน
+
+Sticky Columns
+
+Horizontal Scroll
+
+Highlight วันที่
+
+Keyboard Shortcut
+
+M = มา
+
+L = ลา
+
+A = ขาด
+
+T = สาย
+
+Delete = ล้าง
+
+Auto Save
+
+Summary
+
+Export PDF
+
+Export Excel
+
+Dashboard
+
+เช็คชื่อทั้งห้อง
+
+เช็คขาดทั้งห้อง
+
+คำนวณร้อยละอัตโนมัติ
+
+แก้ไขย้อนหลังได้
+
+ตัวอย่าง Attendance
+เลขที่	ชื่อ	1	2	3	...	100	มา	ลา	ขาด	สาย
+1	สมชาย	M	M	A	...	M	95	2	2	1
+SCORE MANAGEMENT
+
+ออกแบบให้เหมือนแบบบันทึกคะแนน SGS
+
+แต่ทันสมัยกว่า
+
+ใช้งานง่ายกว่า
+
+Excel Style
+
+ส่วนหัว
+
+ปีการศึกษา
+
+ภาคเรียน
+
+ห้อง
+
+วิชา
+
+รหัสวิชา
+
+ครูผู้สอน
+
+จำนวนนักเรียน
+
+Toolbar
+
+เลือกห้อง
+
+เลือกวิชา
+
+เลือกประเภทคะแนน
+
+เพิ่มชิ้นงาน
+
+Import Excel
+
+Export Excel
+
+Export PDF
+
+Save
+
+Refresh
+
+ตารางคะแนน
+เลขที่	ชื่อ	ใบงาน1	ใบงาน2	แบบฝึก	การบ้าน	รายงาน	⭐พิเศษ	กลางภาค	ปลายภาค	รวม	เกรด
+Dynamic Score Components
+
+ครูสามารถ
+
+เพิ่ม
+
+แก้ไข
+
+ลบ
+
+เปลี่ยนคะแนนเต็ม
+
+เปลี่ยนชื่อ
+
+จัดลำดับ
+
+เพิ่มประเภทคะแนนใหม่
+
+ทั้งหมด
+
+ไม่ต้องแก้โค้ด
+
+Auto Save
+
+เมื่อกรอกคะแนน
+
+กด Enter
+
+ระบบ Save ทันที
+
+ไม่ต้องกดปุ่มบันทึก
+
+Excel
+
+รองรับ
+
+Copy
+
+Paste
+
+Undo
+
+Redo
+
+Import
+
+Export
+
+Validation
+
+Summary
+
+แสดง
+
+คะแนนเต็ม
+
+คะแนนเฉลี่ย
+
+สูงสุด
+
+ต่ำสุด
+
+ผ่าน
+
+ไม่ผ่าน
+
+เปอร์เซ็นต์
+
+Grade
+
+GPA
+
+Validation
+
+ห้ามกรอกเกินคะแนนเต็ม
+
+แจ้งเตือนทันที
+
+BONUS SCORE
+
+เพิ่มคะแนน
+
+ลดคะแนน
+
+พร้อมเหตุผล
+
+เช่น
+
+ตอบคำถาม
+
+ช่วยกิจกรรม
+
+อภิปราย
+
+นำเสนอ
+
+ความประพฤติดี
+
+ระบบเก็บ Transaction
+
+คำนวณคะแนนสะสมทันที
+
+ASSIGNMENT
+
+รองรับ
+
+ใบงาน
+
+การบ้าน
+
+แบบฝึกหัด
+
+รายงาน
+
+โครงงาน
+
+กำหนด
+
+คะแนนเต็ม
+
+วันมอบ
+
+วันส่ง
+
+สถานะ
+
+ส่ง
+
+ยังไม่ส่ง
+
+ส่งสาย
+
+GRADE
+
+ครูสามารถ
+
+กำหนดเกณฑ์เอง
+
+ตัดเกรดอัตโนมัติ
+
+Override
+
+Lock Grade
+
+REPORT
+
+สร้างรายงาน
+
+Attendance
+
+Assignment
+
+Score
+
+Grade
+
+Student
+
+Subject
+
+Classroom
+
+Export
+
+PDF
+
+Excel
+
+SETTINGS
+
+School
+
+Teacher
+
+Logo
+
+Theme
+
+Grade Rules
+
+Backup
+
+Restore
+
+UI DESIGN
+
+Modern
+
+Minimal
+
+Apple Style
+
+Google Material 3
+
+Green Pastel
+
+Glassmorphism
+
+Soft Shadow
+
+Light Mode
+
+Dark Mode
+
+Responsive 100%
+
+Sidebar
+
+Top Navbar
+
+Breadcrumb
+
+Dashboard Cards
+
+KPI Cards
+
+Loading Skeleton
+
+Empty State
+
+Toast
+
+Modal
+
+Drawer
+
+Command Palette
+
+Smooth Animation
+
+PERFORMANCE
+
+ใช้
+
+React Server Components
+
+Suspense
+
+Dynamic Import
+
+Image Optimization
+
+Firestore Pagination
+
+Infinite Scroll
+
+Virtual Table
+
+Memoization
+
+Debounce Search
+
+Optimistic UI
+
+QUALITY
+
+Clean Architecture
+
+Feature-based
+
+Reusable Components
+
+Generic Components
+
+Atomic Components
+
+Reusable Dialog
+
+Reusable Form
+
+Reusable DataTable
+
+Reusable Chart
+
+TypeScript Strict
+
+ไม่มี Hardcode
+
+Comment เฉพาะส่วนที่ซับซ้อน
+
+พร้อม Deploy บน Vercel
+
+OUTPUT REQUIREMENTS
+
+ทุกครั้งที่สร้างระบบ
+
+วิเคราะห์ Requirement ก่อน
+ออกแบบ System Architecture
+ออกแบบ Firestore Schema
+ออกแบบ Folder Structure
+ออกแบบ UI/UX ทุกหน้า
+ออกแบบ Component Diagram
+ออกแบบ State Management
+ออกแบบ Security Rules
+ออกแบบ API และ Data Flow
+สร้างโค้ดที่พร้อมใช้งานจริง (Production Ready)
+ใช้ Best Practices ตลอดทั้งโปรเจกต์
+อธิบายเหตุผลในการออกแบบทุกส่วน
+สร้างโค้ดทีละโมดูล พร้อมทดสอบก่อนพัฒนาโมดูลถัดไป
+ตัวอย่างหน้าจอที่ AI ควรสร้าง
+Dashboard
+KPI Cards
+กราฟคะแนนเฉลี่ย
+กราฟการเข้าเรียน
+งานที่ยังไม่ตรวจ
+วิชาที่ยังไม่กรอกคะแนน
+เช็คชื่อ
+Daily View
+Semester View
+Toggle View
+Keyboard Shortcuts
+Auto Save
+Sticky Columns
+สรุปสถิติด้านขวา
+บันทึกคะแนน
+ตารางแบบ Excel (คล้าย SGS)
+Dynamic Columns
+Copy/Paste จาก Excel
+Undo/Redo
+Auto Save
+Validation แบบ Real-time
+สรุปคะแนนและเกรดอัตโนมัติ
+รายงาน
+รายงานคะแนน
+รายงานการเช็คชื่อ
+รายงานผลการเรียน
+Export PDF และ Excel

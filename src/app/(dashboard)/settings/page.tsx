@@ -1,0 +1,882 @@
+"use client";
+
+import React, { useState, useMemo } from "react";
+import { useGMSStore, GradeRange } from "@/lib/store";
+import { useAuth } from "@/features/auth/context";
+import { 
+  Settings as SettingsIcon,
+  Sliders, 
+  Lock, 
+  Unlock, 
+  Save, 
+  RefreshCw, 
+  BookOpen, 
+  Award,
+  AlertCircle,
+  FolderLock,
+  Plus,
+  Trash2,
+  Edit2,
+  User,
+  Calendar
+} from "lucide-react";
+
+export default function SettingsPage() {
+  const {
+    students,
+    activeClassroomId,
+    activeSubjectId,
+    activeSemesterId,
+    gradeRules,
+    gradeResults,
+    updateGradeRules,
+    updateGradeOverride,
+    toggleGradeLock,
+    calculateGrades,
+    subjects,
+    addSubject,
+    updateSubject,
+    deleteSubject,
+    classrooms,
+    addClassroom,
+    updateClassroom,
+    deleteClassroom,
+    academicYears,
+    semesters,
+    addAcademicYear,
+    updateAcademicYear,
+    deleteAcademicYear
+  } = useGMSStore();
+
+  const { user, updateProfile } = useAuth();
+
+  const [ranges, setRanges] = useState<GradeRange[]>(gradeRules.ranges);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("saved");
+
+  // Teacher Profile States
+  const [teacherFirstName, setTeacherFirstName] = useState(user?.firstName || "");
+  const [teacherLastName, setTeacherLastName] = useState(user?.lastName || "");
+  const [teacherEmail, setTeacherEmail] = useState(user?.email || "");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  React.useEffect(() => {
+    if (user) {
+      setTeacherFirstName(user.firstName || "");
+      setTeacherLastName(user.lastName || "");
+      setTeacherEmail(user.email || "");
+    }
+  }, [user]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!teacherFirstName.trim() || !teacherLastName.trim()) return;
+    setIsSavingProfile(true);
+    try {
+      await updateProfile(teacherFirstName.trim(), teacherLastName.trim(), teacherEmail.trim());
+      alert("บันทึกข้อมูลครูผู้สอนสำเร็จ");
+    } catch (e) {
+      console.error(e);
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  // Get active students
+  const activeStudents = useMemo(() => {
+    return students
+      .filter(s => s.classroomId === activeClassroomId)
+      .sort((a, b) => a.rollNo - b.rollNo);
+  }, [students, activeClassroomId]);
+
+  // Map grade results by studentId
+  const gradeResultList = useMemo(() => {
+    return gradeResults
+      .filter(g => g.subjectId === activeSubjectId && g.semesterId === activeSemesterId && g.classroomId === activeClassroomId)
+      .sort((a, b) => {
+        const stdA = activeStudents.find(s => s.id === a.studentId);
+        const stdB = activeStudents.find(s => s.id === b.studentId);
+        return (stdA?.rollNo ?? 0) - (stdB?.rollNo ?? 0);
+      });
+  }, [gradeResults, activeClassroomId, activeSubjectId, activeSemesterId, activeStudents]);
+
+  // Handle saving the custom grade rules
+  const handleSaveRules = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaveStatus("saving");
+    
+    // Sort ranges to make sure it's descending
+    const sorted = [...ranges].sort((a, b) => b.min - a.min);
+    updateGradeRules(sorted);
+    
+    // Force recalculation of grades using the new rules
+    calculateGrades();
+
+    setTimeout(() => {
+      setSaveStatus("saved");
+      alert("บันทึกเกณฑ์การตัดเกรดใหม่เรียบร้อยแล้ว เกรดของนักเรียนจะประมวลผลใหม่โดยอัตโนมัติ");
+    }, 400);
+  };
+
+  const handleRangeChange = (idx: number, field: keyof GradeRange, val: string | number) => {
+    const nextRanges = [...ranges];
+    nextRanges[idx] = {
+      ...nextRanges[idx],
+      [field]: typeof val === "string" ? parseFloat(val) : val
+    };
+    setRanges(nextRanges);
+  };
+
+  const handleToggleLock = (studentId: string) => {
+    toggleGradeLock(studentId);
+  };
+
+  const handleOverrideGrade = (studentId: string, currentGrade: string) => {
+    const override = prompt(`ป้อนเกรดใหม่ที่ต้องการเปลี่ยนสำหรับนักเรียนคนนี้ (เกรดปัจจุบัน: ${currentGrade}):`);
+    if (override === null) return; // cancel
+    
+    // Simple verification
+    const allowed = ["4", "3.5", "3", "2.5", "2", "1.5", "1", "0", "ร", "มส"];
+    if (!allowed.includes(override)) {
+      alert(`เกรดที่ระบุไม่ถูกต้อง ต้องเป็นค่าใดค่าหนึ่งดังนี้: ${allowed.join(", ")}`);
+      return;
+    }
+
+    // Determine GPA points mapping
+    const gpaMap: Record<string, number> = {
+      "4": 4.0, "3.5": 3.5, "3": 3.0, "2.5": 2.5, "2": 2.0, "1.5": 1.5, "1": 1.0, "0": 0.0,
+      "ร": 0.0, "มส": 0.0
+    };
+
+    updateGradeOverride(studentId, override, gpaMap[override] || 0);
+    alert("แก้ไขเกรดสำเร็จ");
+  };
+
+  // Academic Years Form State
+  const [isAddYearOpen, setIsAddYearOpen] = useState(false);
+  const [isEditYearOpen, setIsEditYearOpen] = useState(false);
+  const [editingYear, setEditingYear] = useState<any | null>(null);
+  const [yearInput, setYearInput] = useState("");
+
+  const handleOpenAddYear = () => {
+    setYearInput("");
+    setIsAddYearOpen(true);
+  };
+
+  const handleOpenEditYear = (yearObj: any) => {
+    setEditingYear(yearObj);
+    setYearInput(String(yearObj.year));
+    setIsEditYearOpen(true);
+  };
+
+  const handleSaveYear = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!yearInput.trim()) return;
+    const yearNum = parseInt(yearInput.trim());
+    if (isNaN(yearNum)) return;
+
+    if (isAddYearOpen) {
+      addAcademicYear(yearNum);
+      setIsAddYearOpen(false);
+      alert("เพิ่มปีการศึกษาใหม่สำเร็จ");
+    } else if (isEditYearOpen && editingYear) {
+      updateAcademicYear(editingYear.id, yearNum);
+      setIsEditYearOpen(false);
+      setEditingYear(null);
+      alert("แก้ไขข้อมูลปีการศึกษาสำเร็จ");
+    }
+  };
+
+  const handleDeleteYear = (id: string, year: number) => {
+    if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบปีการศึกษา "${year}"? ข้อมูลที่เกี่ยวข้องทั้งหมดจะถูกลบ`)) {
+      deleteAcademicYear(id);
+      alert("ลบปีการศึกษาเรียบร้อยแล้ว");
+    }
+  };
+
+  // Classrooms Form State
+  const [isAddClassroomOpen, setIsAddClassroomOpen] = useState(false);
+  const [isEditClassroomOpen, setIsEditClassroomOpen] = useState(false);
+  const [editingClassroom, setEditingClassroom] = useState<any | null>(null);
+  const [classNameInput, setClassNameInput] = useState("");
+
+  const handleOpenAddClassroom = () => {
+    setClassNameInput("");
+    setIsAddClassroomOpen(true);
+  };
+
+  const handleOpenEditClassroom = (classroom: any) => {
+    setEditingClassroom(classroom);
+    setClassNameInput(classroom.name);
+    setIsEditClassroomOpen(true);
+  };
+
+  const handleSaveClassroom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!classNameInput.trim()) return;
+
+    if (isAddClassroomOpen) {
+      addClassroom(classNameInput.trim());
+      setIsAddClassroomOpen(false);
+      alert("เพิ่มห้องเรียนใหม่สำเร็จ");
+    } else if (isEditClassroomOpen && editingClassroom) {
+      updateClassroom({
+        ...editingClassroom,
+        name: classNameInput.trim()
+      });
+      setIsEditClassroomOpen(false);
+      setEditingClassroom(null);
+      alert("แก้ไขข้อมูลห้องเรียนสำเร็จ");
+    }
+  };
+
+  const handleDeleteClassroom = (id: string, name: string) => {
+    if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบห้องเรียน "${name}"? นักเรียนและข้อมูลในห้องนี้จะถูกลบออกจากระบบ`)) {
+      deleteClassroom(id);
+      alert("ลบห้องเรียนเรียบร้อยแล้ว");
+    }
+  };
+
+  // Subjects Form State
+  const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
+  const [isEditSubjectOpen, setIsEditSubjectOpen] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<any | null>(null);
+  
+  const [subCode, setSubCode] = useState("");
+  const [subName, setSubName] = useState("");
+  const [subCredit, setSubCredit] = useState(1.5);
+  const [subHours, setSubHours] = useState(3);
+
+  const handleOpenAddSubject = () => {
+    setSubCode("");
+    setSubName("");
+    setSubCredit(1.5);
+    setSubHours(3);
+    setIsAddSubjectOpen(true);
+  };
+
+  const handleOpenEditSubject = (subject: any) => {
+    setEditingSubject(subject);
+    setSubCode(subject.code);
+    setSubName(subject.name);
+    setSubCredit(subject.creditPoints);
+    setSubHours(subject.hoursPerWeek);
+    setIsEditSubjectOpen(true);
+  };
+
+  const handleSaveSubject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subCode.trim() || !subName.trim()) return;
+
+    if (isAddSubjectOpen) {
+      addSubject(subCode.trim(), subName.trim(), subCredit, subHours);
+      setIsAddSubjectOpen(false);
+      alert("เพิ่มวิชาเรียนใหม่สำเร็จ");
+    } else if (isEditSubjectOpen && editingSubject) {
+      updateSubject({
+        ...editingSubject,
+        code: subCode.trim(),
+        name: subName.trim(),
+        creditPoints: subCredit,
+        hoursPerWeek: subHours
+      });
+      setIsEditSubjectOpen(false);
+      alert("แก้ไขข้อมูลวิชาเรียนสำเร็จ");
+    }
+  };
+
+  const handleDeleteSubject = (id: string) => {
+    if (confirm("คุณแน่ใจหรือไม่ว่าต้องการลบวิชาเรียนนี้? ข้อมูลการเข้าเรียนและคะแนนที่เกี่ยวข้องทั้งหมดจะถูกลบอย่างถาวร")) {
+      deleteSubject(id);
+      alert("ลบรายวิชาสำเร็จ");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">ตั้งค่าระบบและเกณฑ์การเรียน</h2>
+          <p className="text-sm text-muted-foreground">
+            ปรับแต่งสูตรการตัดเกรด เกณฑ์คะแนน ล็อกผลการเรียน และปรับแก้ยอดคะแนนรายคน
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: Configuration Cards */}
+        <div className="space-y-6 lg:col-span-1">
+          
+          {/* Teacher Profile Card */}
+          <div className="glass rounded-3xl p-6 border border-border flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold flex items-center gap-1.5">
+                <User className="h-5 w-5 text-emerald-600" />
+                ข้อมูลครูผู้สอน
+              </h3>
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 rounded-full">
+                {user?.role === "teacher" ? "คุณครูผู้สอน" : "ผู้ดูแลระบบ"}
+              </span>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div className="flex justify-center mb-2">
+                <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-emerald-700 dark:text-emerald-300 font-bold border-2 border-emerald-500/25 text-2xl shadow-sm">
+                  {teacherFirstName ? teacherFirstName[0] : "?"}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อจริง</label>
+                <input
+                  type="text"
+                  value={teacherFirstName}
+                  onChange={(e) => setTeacherFirstName(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">นามสกุล</label>
+                <input
+                  type="text"
+                  value={teacherLastName}
+                  onChange={(e) => setTeacherLastName(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">อีเมลผู้ใช้งาน</label>
+                <input
+                  type="email"
+                  value={teacherEmail}
+                  onChange={(e) => setTeacherEmail(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSavingProfile}
+                className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 py-2.5 text-xs font-semibold text-white hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-55"
+              >
+                <Save className="h-4 w-4" />
+                {isSavingProfile ? "กำลังบันทึก..." : "บันทึกข้อมูลส่วนตัว"}
+              </button>
+            </form>
+          </div>
+
+          {/* Grade Range Formula Settings */}
+          <div className="glass rounded-3xl p-6 border border-border h-fit flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold flex items-center gap-1.5">
+              <Sliders className="h-5 w-5 text-emerald-600" />
+              เกณฑ์คะแนนและสัดส่วนเกรด
+            </h3>
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 rounded-full">มาตรฐาน</span>
+          </div>
+
+          <form onSubmit={handleSaveRules} className="space-y-4">
+            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+              {ranges.map((range, idx) => (
+                <div key={range.grade} className="flex items-center gap-3 bg-muted/40 p-2.5 rounded-2xl border border-border">
+                  <span className="w-12 text-xs font-bold text-foreground">เกรด {range.grade}</span>
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <span className="text-[10px] text-muted-foreground">เริ่มที่:</span>
+                    <input
+                      type="number"
+                      value={range.min}
+                      onChange={(e) => handleRangeChange(idx, "min", e.target.value)}
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      required
+                      className="w-16 rounded-xl border border-border bg-background py-1 text-center text-xs outline-none"
+                    />
+                    <span className="text-[10px] text-muted-foreground">-</span>
+                    <input
+                      type="number"
+                      value={range.max}
+                      onChange={(e) => handleRangeChange(idx, "max", e.target.value)}
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      required
+                      className="w-16 rounded-xl border border-border bg-background py-1 text-center text-xs outline-none"
+                    />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground font-mono">({range.gpaPoints} GPA)</span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-xs font-semibold text-white hover:bg-emerald-500 active:scale-[0.98] transition-all shadow-md"
+            >
+              <Save className="h-4 w-4" />
+              บันทึกโครงสร้างเกรด
+            </button>
+          </form>
+        </div>
+        </div>
+
+        {/* Right Column: Grade Lock and Overrides Panel */}
+        <div className="lg:col-span-2 glass rounded-3xl border border-border overflow-hidden flex flex-col h-[500px]">
+          <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+            <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <FolderLock className="h-4 w-4 text-emerald-600" />
+              ล็อกผลคะแนน / แก้ไขเกรดรายวิชารายตัว
+            </span>
+            <div className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/5 px-2.5 py-1 rounded-xl flex items-center gap-1.5 font-medium">
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span>การล็อกเกรดจะป้องกันไม่ให้คะแนนย่อยอัปเดตสถิติทับผลเรียน</span>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/15 text-muted-foreground font-bold border-b border-border sticky top-0 bg-card/95 z-10 select-none">
+                <tr>
+                  <th className="p-4 w-16 text-center">เลขที่</th>
+                  <th className="p-4">นักเรียน</th>
+                  <th className="p-4 w-28 text-center">คะแนนดิบรวม</th>
+                  <th className="p-4 w-24 text-center">คะแนนพฤติกรรม</th>
+                  <th className="p-4 w-24 text-center">เกรดระบบ</th>
+                  <th className="p-4 w-28 text-center">สถานะล็อก</th>
+                  <th className="p-4 w-32 text-center">สิทธิ์ผู้ตรวจ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {gradeResultList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                      <p className="font-semibold text-sm">ไม่พบข้อมูลประมวลผลผลการเรียน</p>
+                      <p className="text-xs">กรุณากรอกคะแนนผู้เรียนในหน้า "บันทึกคะแนน" เพื่อเริ่มการประมวลผลเกรด</p>
+                    </td>
+                  </tr>
+                ) : (
+                  gradeResultList.map((res) => {
+                    const std = activeStudents.find(s => s.id === res.studentId);
+                    return (
+                      <tr key={res.id} className="hover:bg-muted/10">
+                        <td className="p-4 text-center font-semibold text-muted-foreground">{std?.rollNo || "-"}</td>
+                        <td className="p-4 font-semibold text-foreground">
+                          {std ? `${std.prefix}${std.firstName} ${std.lastName}` : "ไม่ระบุชื่อ"}
+                        </td>
+                        <td className="p-4 text-center text-foreground font-semibold">{res.rawScoreSum}</td>
+                        <td className="p-4 text-center text-amber-500 font-bold">{res.bonusScoreSum > 0 ? `+${res.bonusScoreSum}` : res.bonusScoreSum}</td>
+                        <td className="p-4 text-center">
+                          <span className="px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-700">
+                            {res.grade}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => handleToggleLock(res.studentId)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors ${
+                              res.isLocked 
+                                ? "bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/20" 
+                                : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20"
+                            }`}
+                          >
+                            {res.isLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                            {res.isLocked ? "ล็อกแล้ว" : "ไม่ได้ล็อก"}
+                          </button>
+                        </td>
+                        <td className="p-4 text-center">
+                          <button
+                            onClick={() => handleOverrideGrade(res.studentId, res.grade)}
+                            disabled={res.isLocked}
+                            className="text-[10px] bg-card border border-border hover:bg-muted font-bold px-2 py-1 rounded-xl transition-all disabled:opacity-30 disabled:pointer-events-none"
+                          >
+                            เปลี่ยนเกรด
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Row 2: Subject Management Section */}
+      <div className="mt-8 glass rounded-3xl border border-border overflow-hidden">
+        <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+          <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+            <BookOpen className="h-4 w-4 text-emerald-600" />
+            จัดการโครงสร้างรายวิชาเรียน
+          </span>
+          <button
+            onClick={handleOpenAddSubject}
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 transition-all active:scale-95"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            เพิ่มวิชาเรียน
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-muted/15 text-muted-foreground font-bold border-b border-border select-none">
+              <tr>
+                <th className="p-4 w-32">รหัสวิชา</th>
+                <th className="p-4">ชื่อรายวิชา</th>
+                <th className="p-4 w-28 text-center">หน่วยกิต</th>
+                <th className="p-4 w-32 text-center">ชั่วโมง / สัปดาห์</th>
+                <th className="p-4 w-28 text-center">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {subjects.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-muted-foreground">ไม่พบข้อมูลรายวิชาในระบบ</td>
+                </tr>
+              ) : (
+                subjects.map((sub) => (
+                  <tr key={sub.id} className="hover:bg-muted/10">
+                    <td className="p-4 font-mono font-bold text-foreground">{sub.code}</td>
+                    <td className="p-4 font-semibold text-foreground">{sub.name}</td>
+                    <td className="p-4 text-center text-foreground font-semibold">{sub.creditPoints} หน่วยกิต</td>
+                    <td className="p-4 text-center text-foreground">{sub.hoursPerWeek} ชม.</td>
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => handleOpenEditSubject(sub)}
+                          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-emerald-600 transition-colors"
+                          title="แก้ไขรายวิชา"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSubject(sub.id)}
+                          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+                          title="ลบรายวิชา"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Academic Year Management Section */}
+      <div className="mt-8 glass rounded-3xl border border-border overflow-hidden">
+        <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+          <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+            <Calendar className="h-4 w-4 text-emerald-600" />
+            จัดการปีการศึกษา
+          </span>
+          <button
+            onClick={handleOpenAddYear}
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 transition-all active:scale-95"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            เพิ่มปีการศึกษา
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-muted/15 text-muted-foreground font-bold border-b border-border select-none">
+              <tr>
+                <th className="p-4">ปีการศึกษา</th>
+                <th className="p-4 w-36 text-center">สถานะ</th>
+                <th className="p-4 w-28 text-center">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {academicYears.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="p-8 text-center text-muted-foreground">ไม่พบข้อมูลปีการศึกษาในระบบ</td>
+                </tr>
+              ) : (
+                academicYears.map((ay) => (
+                  <tr key={ay.id} className="hover:bg-muted/10">
+                    <td className="p-4 font-bold text-foreground">{ay.year}</td>
+                    <td className="p-4 text-center text-foreground font-semibold">
+                      <span className={`px-2 py-0.5 rounded font-bold ${ay.status === 'active' ? 'bg-emerald-500/10 text-emerald-700' : 'bg-muted text-muted-foreground'}`}>
+                        {ay.status === 'active' ? 'ใช้งานอยู่' : 'ปิดแล้ว'}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => handleOpenEditYear(ay)}
+                          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-emerald-600 transition-colors"
+                          title="แก้ไขปีการศึกษา"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteYear(ay.id, ay.year)}
+                          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+                          title="ลบปีการศึกษา"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Row 3: Classroom Management Section */}
+      <div className="mt-8 glass rounded-3xl border border-border overflow-hidden">
+        <div className="p-4 border-b border-border bg-muted/30 flex items-center justify-between">
+          <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+            <User className="h-4 w-4 text-emerald-600" />
+            จัดการรายชื่อห้องเรียน
+          </span>
+          <button
+            onClick={handleOpenAddClassroom}
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 transition-all active:scale-95"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            เพิ่มห้องเรียน
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-muted/15 text-muted-foreground font-bold border-b border-border select-none">
+              <tr>
+                <th className="p-4">ชื่อห้องเรียน</th>
+                <th className="p-4 w-36 text-center">จำนวนนักเรียน</th>
+                <th className="p-4 w-28 text-center">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {classrooms.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="p-8 text-center text-muted-foreground">ไม่พบข้อมูลห้องเรียนในระบบ</td>
+                </tr>
+              ) : (
+                classrooms.map((cls) => {
+                  const count = students.filter(s => s.classroomId === cls.id).length;
+                  return (
+                    <tr key={cls.id} className="hover:bg-muted/10">
+                      <td className="p-4 font-bold text-foreground">ห้อง {cls.name}</td>
+                      <td className="p-4 text-center text-foreground font-semibold">{count} คน</td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditClassroom(cls)}
+                            className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-emerald-600 transition-colors"
+                            title="แก้ไขชื่อห้องเรียน"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClassroom(cls.id, cls.name)}
+                            className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+                            title="ลบห้องเรียน"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Add / Edit Subject Modal Dialog */}
+      {(isAddSubjectOpen || isEditSubjectOpen) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="glass w-full max-w-sm rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold mb-4 text-foreground">
+              {isAddSubjectOpen ? "เพิ่มวิชาเรียนใหม่" : "แก้ไขข้อมูลวิชาเรียน"}
+            </h3>
+
+            <form onSubmit={handleSaveSubject} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">รหัสวิชา</label>
+                <input
+                  type="text"
+                  placeholder="เช่น ว21101"
+                  value={subCode}
+                  onChange={(e) => setSubCode(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-sm outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อรายวิชา</label>
+                <input
+                  type="text"
+                  placeholder="เช่น วิทยาศาสตร์ 1"
+                  value={subName}
+                  onChange={(e) => setSubName(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-sm outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1">หน่วยกิต</label>
+                  <input
+                    type="number"
+                    value={subCredit}
+                    onChange={(e) => setSubCredit(parseFloat(e.target.value))}
+                    min={0.5}
+                    max={5.0}
+                    step={0.5}
+                    required
+                    className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-sm outline-none text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1">ชั่วโมง / สัปดาห์</label>
+                  <input
+                    type="number"
+                    value={subHours}
+                    onChange={(e) => setSubHours(parseInt(e.target.value))}
+                    min={1}
+                    max={20}
+                    required
+                    className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-sm outline-none text-foreground"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddSubjectOpen(false);
+                    setIsEditSubjectOpen(false);
+                  }}
+                  className="rounded-2xl border border-border bg-card px-4 py-2 text-xs font-semibold hover:bg-muted text-foreground"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
+                >
+                  บันทึกรายวิชา
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Classroom Modal Dialog */}
+      {(isAddClassroomOpen || isEditClassroomOpen) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="glass w-full max-w-sm rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold mb-4 text-foreground">
+              {isAddClassroomOpen ? "เพิ่มห้องเรียนใหม่" : "แก้ไขชื่อห้องเรียน"}
+            </h3>
+
+            <form onSubmit={handleSaveClassroom} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อห้องเรียน / ชั้นเรียน</label>
+                <input
+                  type="text"
+                  placeholder="เช่น ม.1/1 หรือ ม.2/3"
+                  value={classNameInput}
+                  onChange={(e) => setClassNameInput(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-sm outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddClassroomOpen(false);
+                    setIsEditClassroomOpen(false);
+                  }}
+                  className="rounded-2xl border border-border bg-card px-4 py-2 text-xs font-semibold hover:bg-muted text-foreground"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
+                >
+                  บันทึกห้องเรียน
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Year Modal Dialog */}
+      {(isAddYearOpen || isEditYearOpen) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <div className="glass w-full max-w-sm rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold mb-4 text-foreground">
+              {isAddYearOpen ? "เพิ่มปีการศึกษาใหม่" : "แก้ไขปีการศึกษา"}
+            </h3>
+
+            <form onSubmit={handleSaveYear} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ปีการศึกษา (พ.ศ.)</label>
+                <input
+                  type="number"
+                  placeholder="เช่น 2570"
+                  value={yearInput}
+                  onChange={(e) => setYearInput(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-sm outline-none focus:border-emerald-500 text-foreground"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddYearOpen(false);
+                    setIsEditYearOpen(false);
+                  }}
+                  className="rounded-2xl border border-border bg-card px-4 py-2 text-xs font-semibold hover:bg-muted text-foreground"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
+                >
+                  บันทึกปีการศึกษา
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

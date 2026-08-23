@@ -288,6 +288,47 @@ export default function StudentsPage() {
     reader.readAsBinaryString(file);
   };
 
+  // Export CSV Template
+  const downloadCsvTemplate = () => {
+    const csvContent = "\uFEFFคำนำหน้า,ชื่อจริง,นามสกุล,เพศ (M/F)\nเด็กชาย,สมชาย,รักดี,M\nเด็กหญิง,สมศรี,ใจใส,F\nนาย,สมคิด,เก่งเรียน,M\nนางสาว,สมใจ,เรียนดี,F\n";
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "gms_student_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Export Students to CSV
+  const exportStudentsToCsv = () => {
+    if (activeStudents.length === 0) {
+      alert("ไม่พบรายชื่อนักเรียนในห้องเรียนนี้สำหรับส่งออก");
+      return;
+    }
+
+    const headers = ["เลขที่", "คำนำหน้า", "ชื่อจริง", "นามสกุล", "เพศ", "สถานภาพ"];
+    const rows = activeStudents.map(s => [
+      s.rollNo,
+      s.prefix,
+      s.firstName,
+      s.lastName,
+      s.gender === "M" ? "ชาย" : "หญิง",
+      s.status === "active" ? "ปกติ" : s.status === "dropped" ? "จำหน่ายออก" : "ย้ายสถานศึกษา"
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `รายชื่อนักเรียน_ห้อง_${currentClass?.name || "ม1"}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Export Template Excel
   const downloadTemplate = () => {
     const data = [
@@ -312,7 +353,7 @@ export default function StudentsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">รายชื่อนักเรียนห้อง {currentClass?.name}</h2>
           <p className="text-sm text-muted-foreground">
-            จัดการข้อมูลนักเรียน รายชื่อ ย้ายห้องเรียน เลื่อนชั้นเรียน และนำเข้าไฟล์คะแนน
+            จัดการข้อมูลนักเรียน รายชื่อ ย้ายห้องเรียน เลื่อนชั้นเรียน และนำเข้า-ส่งออกไฟล์ CSV / Excel
           </p>
         </div>
 
@@ -325,10 +366,19 @@ export default function StudentsPage() {
             <Plus className="h-4 w-4" />
             เพิ่มนักเรียน
           </button>
+
+          <button
+            onClick={exportStudentsToCsv}
+            className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all text-foreground"
+            title="ดาวน์โหลดรายชื่อห้องนี้เป็นไฟล์ CSV"
+          >
+            <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            ส่งออก CSV
+          </button>
           
           <button
             onClick={() => setIsPasteOpen(true)}
-            className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all"
+            className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all text-foreground"
           >
             <ClipboardPaste className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             ก๊อปปี้วางจาก Excel
@@ -336,10 +386,10 @@ export default function StudentsPage() {
 
           <button
             onClick={() => setIsImportOpen(true)}
-            className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all"
+            className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all text-foreground"
           >
-            <Upload className="h-4 w-4" />
-            นำเข้าไฟล์ Excel
+            <Upload className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            นำเข้า CSV / Excel
           </button>
         </div>
       </div>
@@ -683,14 +733,26 @@ export default function StudentsPage() {
               />
             </div>
 
-            <div className="flex items-center justify-between mt-6">
-              <button
-                onClick={downloadTemplate}
-                className="flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-500 font-semibold transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                ดาวน์โหลดเทมเพลต Excel
-              </button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={downloadCsvTemplate}
+                  className="flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-500 font-semibold transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  เทมเพลต CSV
+                </button>
+                <span className="text-muted-foreground/30">•</span>
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-500 font-semibold transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  เทมเพลต Excel
+                </button>
+              </div>
               <button
                 onClick={() => setIsImportOpen(false)}
                 className="rounded-2xl border border-border bg-card px-4 py-2 text-xs font-semibold hover:bg-muted transition-all"

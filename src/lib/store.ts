@@ -861,8 +861,138 @@ export const useGMSStore = create<GMSState>()(
           try {
             // 1. If Supabase is available, save to Supabase Cloud
             if (isSupabaseAvailable()) {
+              // Save schools & branding
+              if (state.schools && state.schools.length > 0) {
+                const schoolRows = state.schools.map((s, idx) => ({
+                  id: s.id,
+                  name_th: idx === 0 ? (state.mainTitle || s.nameTh) : s.nameTh,
+                  name_en: idx === 0 ? (state.subTitle || s.nameEn) : s.nameEn,
+                  logo_url: idx === 0 ? (state.schoolLogo || s.logoUrl || null) : (s.logoUrl || null),
+                  status: s.status || "active"
+                }));
+                await supabase.from("schools").upsert(schoolRows, { onConflict: "id" });
+              }
+
+              // Save academic years
+              if (state.academicYears && state.academicYears.length > 0) {
+                const yearRows = state.academicYears.map(y => ({
+                  id: y.id,
+                  school_id: y.schoolId,
+                  year: Number(y.year),
+                  status: y.status || "active"
+                }));
+                await supabase.from("academic_years").upsert(yearRows, { onConflict: "id" });
+              }
+
+              // Save semesters
+              if (state.semesters && state.semesters.length > 0) {
+                const semRows = state.semesters.map(s => ({
+                  id: s.id,
+                  academic_year_id: s.academicYearId,
+                  semester_no: Number(s.semesterNo),
+                  status: s.status || "active"
+                }));
+                await supabase.from("semesters").upsert(semRows, { onConflict: "id" });
+              }
+
+              // Save classrooms
+              if (state.classrooms && state.classrooms.length > 0) {
+                const classRows = state.classrooms.map(c => ({
+                  id: c.id,
+                  school_id: c.schoolId,
+                  academic_year_id: c.academicYearId,
+                  name: c.name,
+                  teacher_id: null,
+                  student_count: Number(c.studentCount) || 0
+                }));
+                await supabase.from("classrooms").upsert(classRows, { onConflict: "id" });
+              }
+
+              // Save subjects
+              if (state.subjects && state.subjects.length > 0) {
+                const subRows = state.subjects.map(s => ({
+                  id: s.id,
+                  school_id: s.schoolId,
+                  code: s.code,
+                  name: s.name,
+                  credit_points: Number(s.creditPoints) || 1.0,
+                  hours_per_week: Number(s.hoursPerWeek) || 2
+                }));
+                await supabase.from("subjects").upsert(subRows, { onConflict: "id" });
+              }
+
+              // Save grade rules
+              if (state.gradeRules) {
+                const ruleRow = {
+                  id: state.gradeRules.id || "rule-default",
+                  school_id: state.gradeRules.schoolId || state.schools[0]?.id || "school-1",
+                  subject_id: state.gradeRules.subjectId || null,
+                  ranges: state.gradeRules.ranges || []
+                };
+                await supabase.from("grade_rules").upsert(ruleRow, { onConflict: "id" });
+              }
+
+              // Save students
+              if (state.students && state.students.length > 0) {
+                const studentRows = state.students.map(std => ({
+                  id: std.id,
+                  school_id: std.schoolId,
+                  classroom_id: std.classroomId,
+                  prefix: std.prefix,
+                  first_name: std.firstName,
+                  last_name: std.lastName,
+                  gender: std.gender,
+                  roll_no: Number(std.rollNo),
+                  status: std.status || "active"
+                }));
+                await supabase.from("students").upsert(studentRows, { onConflict: "id" });
+              }
+
+              // Save enrollments
+              if (state.enrollments && state.enrollments.length > 0) {
+                const enrollRows = state.enrollments.map(e => ({
+                  id: e.id,
+                  student_id: e.studentId,
+                  subject_id: e.subjectId,
+                  semester_id: e.semesterId,
+                  classroom_id: e.classroomId,
+                  status: e.status || "active"
+                }));
+                await supabase.from("enrollments").upsert(enrollRows, { onConflict: "id" });
+              }
+
+              // Save score components
+              if (state.scoreComponents && state.scoreComponents.length > 0) {
+                const compRows = state.scoreComponents.map(c => ({
+                  id: c.id,
+                  subject_id: c.subjectId,
+                  semester_id: c.semesterId,
+                  classroom_id: c.classroomId,
+                  name: c.name,
+                  type: c.type || "assignment",
+                  max_score: Number(c.maxScore) || 10,
+                  weight_percent: Number(c.weightPercent) || 10,
+                  order_no: Number(c.order) || 1
+                }));
+                await supabase.from("score_components").upsert(compRows, { onConflict: "id" });
+              }
+
+              // Save attendance sessions
+              if (state.attendanceSessions && state.attendanceSessions.length > 0) {
+                const sesRows = state.attendanceSessions.map(ses => ({
+                  id: ses.id,
+                  school_id: ses.schoolId,
+                  classroom_id: ses.classroomId,
+                  subject_id: ses.subjectId,
+                  semester_id: ses.semesterId,
+                  date: ses.date,
+                  session_no: Number(ses.sessionNo) || 1
+                }));
+                await supabase.from("attendance_sessions").upsert(sesRows, { onConflict: "id" });
+              }
+
               // Save attendance records
-              if (state.attendanceRecords.length > 0) {
+              if (state.attendanceRecords && state.attendanceRecords.length > 0) {
                 const recordsToSave = state.attendanceRecords.map(r => ({
                   id: r.id,
                   session_id: r.sessionId,
@@ -875,7 +1005,7 @@ export const useGMSStore = create<GMSState>()(
               }
 
               // Save scores
-              if (state.scores.length > 0) {
+              if (state.scores && state.scores.length > 0) {
                 const scoresToSave = state.scores.map(sc => ({
                   id: sc.id,
                   student_id: sc.studentId,
@@ -888,8 +1018,22 @@ export const useGMSStore = create<GMSState>()(
                 await supabase.from("scores").upsert(scoresToSave, { onConflict: "student_id,score_component_id" });
               }
 
+              // Save bonus scores
+              if (state.bonusScores && state.bonusScores.length > 0) {
+                const bonusRows = state.bonusScores.map(b => ({
+                  id: b.id,
+                  student_id: b.studentId,
+                  subject_id: b.subjectId,
+                  semester_id: b.semesterId,
+                  points: Number(b.points),
+                  reason: b.reason || "",
+                  created_at: b.timestamp || new Date().toISOString()
+                }));
+                await supabase.from("bonus_scores").upsert(bonusRows, { onConflict: "id" });
+              }
+
               // Save grade results
-              if (state.gradeResults.length > 0) {
+              if (state.gradeResults && state.gradeResults.length > 0) {
                 const resultsToSave = state.gradeResults.map(gr => ({
                   id: gr.id,
                   student_id: gr.studentId,

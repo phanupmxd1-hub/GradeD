@@ -182,6 +182,7 @@ export default function SettingsPage() {
     
     // Force recalculation of grades using the new rules
     calculateGrades();
+    saveAccountData();
 
     setTimeout(() => {
       setSaveStatus("saved");
@@ -200,6 +201,7 @@ export default function SettingsPage() {
 
   const handleToggleLock = (studentId: string) => {
     toggleGradeLock(studentId);
+    saveAccountData();
   };
 
   const handleOverrideGrade = (studentId: string, currentGrade: string) => {
@@ -220,6 +222,7 @@ export default function SettingsPage() {
     };
 
     updateGradeOverride(studentId, override, gpaMap[override] || 0);
+    saveAccountData();
     alert("แก้ไขเกรดสำเร็จ");
   };
 
@@ -249,11 +252,13 @@ export default function SettingsPage() {
     if (isAddYearOpen) {
       addAcademicYear(yearNum);
       setIsAddYearOpen(false);
+      saveAccountData();
       alert("เพิ่มปีการศึกษาใหม่สำเร็จ");
     } else if (isEditYearOpen && editingYear) {
       updateAcademicYear(editingYear.id, yearNum);
       setIsEditYearOpen(false);
       setEditingYear(null);
+      saveAccountData();
       alert("แก้ไขข้อมูลปีการศึกษาสำเร็จ");
     }
   };
@@ -261,6 +266,7 @@ export default function SettingsPage() {
   const handleDeleteYear = (id: string, year: number) => {
     if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบปีการศึกษา "${year}"? ข้อมูลที่เกี่ยวข้องทั้งหมดจะถูกลบ`)) {
       deleteAcademicYear(id);
+      saveAccountData();
       alert("ลบปีการศึกษาเรียบร้อยแล้ว");
     }
   };
@@ -289,6 +295,7 @@ export default function SettingsPage() {
     if (isAddClassroomOpen) {
       addClassroom(classNameInput.trim());
       setIsAddClassroomOpen(false);
+      saveAccountData();
       alert("เพิ่มห้องเรียนใหม่สำเร็จ");
     } else if (isEditClassroomOpen && editingClassroom) {
       updateClassroom({
@@ -297,6 +304,7 @@ export default function SettingsPage() {
       });
       setIsEditClassroomOpen(false);
       setEditingClassroom(null);
+      saveAccountData();
       alert("แก้ไขข้อมูลห้องเรียนสำเร็จ");
     }
   };
@@ -304,6 +312,7 @@ export default function SettingsPage() {
   const handleDeleteClassroom = (id: string, name: string) => {
     if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบห้องเรียน "${name}"? นักเรียนและข้อมูลในห้องนี้จะถูกลบออกจากระบบ`)) {
       deleteClassroom(id);
+      saveAccountData();
       alert("ลบห้องเรียนเรียบร้อยแล้ว");
     }
   };
@@ -342,6 +351,7 @@ export default function SettingsPage() {
     if (isAddSubjectOpen) {
       addSubject(subCode.trim(), subName.trim(), subCredit, subHours);
       setIsAddSubjectOpen(false);
+      saveAccountData();
       alert("เพิ่มวิชาเรียนใหม่สำเร็จ");
     } else if (isEditSubjectOpen && editingSubject) {
       updateSubject({
@@ -352,6 +362,7 @@ export default function SettingsPage() {
         hoursPerWeek: subHours
       });
       setIsEditSubjectOpen(false);
+      saveAccountData();
       alert("แก้ไขข้อมูลวิชาเรียนสำเร็จ");
     }
   };
@@ -359,6 +370,7 @@ export default function SettingsPage() {
   const handleDeleteSubject = (id: string) => {
     if (confirm("คุณแน่ใจหรือไม่ว่าต้องการลบวิชาเรียนนี้? ข้อมูลการเข้าเรียนและคะแนนที่เกี่ยวข้องทั้งหมดจะถูกลบอย่างถาวร")) {
       deleteSubject(id);
+      saveAccountData();
       alert("ลบรายวิชาสำเร็จ");
     }
   };

@@ -150,29 +150,37 @@ function LoginContent() {
           </button>
         </form>
 
-        <button
-          type="button"
-          onClick={async () => {
-            setLoading(true);
-            try {
-              await login("teacher@school.ac.th", "password");
-              router.push("/dashboard");
-            } finally {
-              setLoading(false);
-            }
-          }}
-          disabled={loading}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 py-3.5 text-sm font-bold text-emerald-700 dark:text-emerald-300 transition-all hover:bg-emerald-500/20 active:scale-[0.98] disabled:opacity-50"
-        >
-          <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          เข้าใช้งานระบบทันที (โหมดผู้ใช้เดี่ยว)
-        </button>
+        <div className="mt-4 space-y-2.5">
+          <button
+            type="button"
+            onClick={async () => {
+              setLoading(true);
+              try {
+                await login("admin@graded.com", "Admin1234!");
+                router.push("/dashboard");
+              } finally {
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600/10 border border-emerald-500/25 py-3 text-xs font-bold text-emerald-700 dark:text-emerald-300 transition-all hover:bg-emerald-500/20 active:scale-[0.98] disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            เข้าสู่ระบบในฐานะ Admin (ผู้ดูแลระบบ)
+          </button>
+        </div>
+
+        <div className="mt-6 p-3 rounded-2xl bg-muted/40 border border-border text-center text-xs text-muted-foreground">
+          <p className="font-semibold text-foreground mb-0.5">🔑 ข้อมูลบัญชีผู้ดูแลระบบ (Admin User)</p>
+          <p>อีเมล: <code className="text-emerald-600 font-mono">admin@graded.com</code></p>
+          <p>รหัสผ่าน: <code className="text-emerald-600 font-mono">Admin1234!</code></p>
+        </div>
 
         <div className="mt-6 text-center">
           <p className="text-xs text-muted-foreground">
-            ยังไม่มีบัญชีผู้ใช้งาน?{" "}
+            ต้องการสร้างบัญชีใหม่?{" "}
             <Link href="/register" className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline">
-              สมัครสมาชิกเข้าใช้งานฟรีที่นี่
+              ลงทะเบียนเข้าใช้งานที่นี่
             </Link>
           </p>
         </div>

@@ -94,11 +94,11 @@ export default function StudentsPage() {
   const handleOpenEdit = (student: Student) => {
     setTargetStudent(student);
     setRollNo(student.rollNo);
-    setPrefix(student.prefix);
+    setPrefix(student.prefix as any);
     setFirstName(student.firstName);
     setLastName(student.lastName);
-    setGender(student.gender);
-    setStatus(student.status);
+    setGender(student.gender as any);
+    setStatus(student.status as any);
     setIsEditOpen(true);
   };
 

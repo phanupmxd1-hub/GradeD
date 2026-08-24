@@ -25,7 +25,9 @@ import {
   Building2,
   X as CloseIcon,
   Type,
-  Check
+  Check,
+  Smartphone,
+  Share2
 } from "lucide-react";
 import { useTheme } from "@/components/providers/ThemeProvider";
 
@@ -651,6 +653,42 @@ export default function SettingsPage() {
                 >
                   ปรับใช้
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* iOS & Mobile Web App Guide Card */}
+          <div className="glass rounded-3xl p-6 border border-border flex flex-col shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold flex items-center gap-1.5 text-foreground">
+                <Smartphone className="h-5 w-5 text-emerald-600" />
+                ใช้งานบน iOS (iPhone & iPad)
+              </h3>
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 rounded-full">
+                PWA App
+              </span>
+            </div>
+
+            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+              คุณสามารถติดตั้ง GradeD Portal เป็นแอปพลิเคชันเต็มหน้าจอบน iPhone และ iPad ได้โดยไม่ต้องโหลดผ่าน App Store:
+            </p>
+
+            <div className="space-y-2.5 p-3.5 rounded-2xl bg-muted/40 border border-border text-xs text-foreground">
+              <div className="flex items-start gap-2">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">1</span>
+                <p>เปิดเว็บไซต์นี้ในเบราว์เซอร์ <strong>Safari</strong> บน iPhone หรือ iPad</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">2</span>
+                <p>กดปุ่ม <strong>แชร์ (Share <Share2 className="inline h-3 w-3 mx-0.5 text-emerald-600" />)</strong> ที่แถบเมนูด้านล่างของ Safari</p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">3</span>
+                <p>เลื่อนลงมาแล้วเลือก <strong>&quot;เพิ่มไปยังหน้าจอโฮม&quot; (Add to Home Screen)</strong></p>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">4</span>
+                <p>กด <strong>&quot;เพิ่ม&quot; (Add)</strong> เพื่อรับไอคอนแอปบนหน้าจอโฮม เปิดใช้งานแบบเต็มจอได้ทันที</p>
               </div>
             </div>
           </div>

@@ -481,9 +481,40 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Dashboard Main Content Scroll Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-28 lg:pb-8">
           {children}
         </main>
+
+        {/* Mobile / iOS Bottom Navigation Bar */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/90 backdrop-blur-xl border-t border-border px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-lg shadow-black/5">
+          {[
+            { name: "สรุปผล", path: "/dashboard", icon: LayoutDashboard },
+            { name: "นักเรียน", path: "/students", icon: Users },
+            { name: "เช็คชื่อ", path: "/attendance", icon: CalendarCheck },
+            { name: "คะแนน", path: "/scores", icon: GraduationCap },
+            { name: "รายงาน", path: "/reports", icon: FileSpreadsheet },
+            { name: "ตั้งค่า", path: "/settings", icon: SettingsIcon },
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.path);
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                className={`flex flex-col items-center justify-center py-1 px-2 rounded-2xl transition-all ${
+                  active
+                    ? "text-emerald-600 dark:text-emerald-400 font-bold scale-105"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className={`p-1 rounded-xl transition-all ${active ? "bg-emerald-500/15" : ""}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <span className="text-[10px] tracking-tight mt-0.5">{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
       </div>
 
       {/* Add Classroom Dialog Modal */}

@@ -43,7 +43,7 @@ export default function BonusPage() {
   // Filtered bonus logs for active classroom/subject/semester
   const activeBonusLogs = useMemo(() => {
     return bonusScores
-      .filter(b => b.subjectId === activeSubjectId && b.semesterId === activeSemesterId)
+      .filter(b => (!b.subjectId || b.subjectId === activeSubjectId) && (!b.semesterId || b.semesterId === activeSemesterId))
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }, [bonusScores, activeSubjectId, activeSemesterId]);
 

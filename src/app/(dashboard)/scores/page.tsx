@@ -30,7 +30,6 @@ import {
   X,
   ChevronRight,
   ChevronLeft,
-  HelpCircle,
   Pencil
 } from "lucide-react";
 
@@ -48,7 +47,7 @@ export default function ScoresPage() {
     scoreComponents,
     scores,
     bonusScores,
-    gradeResults,
+    gradeRules,
     updateScore,
     bulkUpdateScores,
     undoScore,
@@ -62,7 +61,6 @@ export default function ScoresPage() {
     calculateGrades,
     saveAccountData,
     syncStatus,
-    syncError,
     lastSavedTime,
     hasUnsavedChanges
   } = useGMSStore();
@@ -78,7 +76,6 @@ export default function ScoresPage() {
   const [isEditCompOpen, setIsEditCompOpen] = useState(false);
   const [isPasteOpen, setIsPasteOpen] = useState(false);
   const [isBonusOpen, setIsBonusOpen] = useState(false);
-  const [isFillDefaultOpen, setIsFillDefaultOpen] = useState(false);
   const [isSpeedGradingOpen, setIsSpeedGradingOpen] = useState(false);
   
   // Speed Grading Mode State
@@ -89,9 +86,7 @@ export default function ScoresPage() {
   // Selection/State for actions
   const [editingComp, setEditingComp] = useState<ScoreComponent | null>(null);
   const [activeCompForPaste, setActiveCompForPaste] = useState<string | null>(null);
-  const [activeCompForFill, setActiveCompForFill] = useState<ScoreComponent | null>(null);
   const [pastedScoresText, setPastedScoresText] = useState("");
-  const [defaultFillValue, setDefaultFillValue] = useState<number>(10);
   const [openColumnMenuId, setOpenColumnMenuId] = useState<string | null>(null);
   
   // Bonus score form
@@ -173,22 +168,64 @@ export default function ScoresPage() {
     return map;
   }, [scores]);
 
-  // Map grade results by studentId
-  const gradeMap = useMemo(() => {
-    const map: Record<string, { total: number; grade: string; bonus: number; gpa: number; isLocked: boolean }> = {};
-    gradeResults
-      .filter(g => g.subjectId === activeSubjectId && g.semesterId === activeSemesterId)
-      .forEach(g => {
-        map[g.studentId] = { 
-          total: g.totalScore, 
-          grade: g.grade, 
-          bonus: g.bonusScoreSum,
-          gpa: g.gpaPoints,
-          isLocked: g.isLocked
-        };
-      });
+  // Map bonus scores dynamically to sync 100% with Bonus Page
+  const studentBonusMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    activeStudents.forEach(std => {
+      const totalBonus = bonusScores
+        .filter(b => b.studentId === std.id && 
+          (!b.subjectId || b.subjectId === activeSubjectId) && 
+          (!b.semesterId || b.semesterId === activeSemesterId))
+        .reduce((sum, b) => sum + (Number(b.points) || 0), 0);
+      map[std.id] = totalBonus;
+    });
     return map;
-  }, [gradeResults, activeSubjectId, activeSemesterId]);
+  }, [activeStudents, bonusScores, activeSubjectId, activeSemesterId]);
+
+  // Map Real-time Student Grade Summary (Raw, Bonus, Total Score, Grade, GPA)
+  const studentGradeSummary = useMemo(() => {
+    const map: Record<string, { rawScore: number; bonus: number; total: number; grade: string; gpa: number }> = {};
+    
+    const calculateFinalGrade = (scoreSum: number, ranges: any[]) => {
+      const found = ranges.find(r => scoreSum >= r.min && scoreSum <= r.max);
+      return found ? { grade: found.grade, gpa: found.gpaPoints } : { grade: "0", gpa: 0 };
+    };
+
+    const ranges = gradeRules?.ranges || [
+      { min: 80, max: 100, grade: "4", gpaPoints: 4.0 },
+      { min: 75, max: 79.9, grade: "3.5", gpaPoints: 3.5 },
+      { min: 70, max: 74.9, grade: "3", gpaPoints: 3.0 },
+      { min: 65, max: 69.9, grade: "2.5", gpaPoints: 2.5 },
+      { min: 60, max: 64.9, grade: "2", gpaPoints: 2.0 },
+      { min: 55, max: 59.9, grade: "1.5", gpaPoints: 1.5 },
+      { min: 50, max: 54.9, grade: "1", gpaPoints: 1.0 },
+      { min: 0, max: 49.9, grade: "0", gpaPoints: 0.0 }
+    ];
+
+    activeStudents.forEach(std => {
+      let rawScore = 0;
+      activeComponents.forEach(comp => {
+        const val = scoreMap[`${std.id}_${comp.id}`] ?? 0;
+        if (comp.maxScore > 0) {
+          rawScore += (val / comp.maxScore) * comp.weightPercent;
+        }
+      });
+
+      const bonus = studentBonusMap[std.id] ?? 0;
+      const total = Math.min(100, Math.max(0, Math.round((rawScore + bonus) * 10) / 10));
+      const { grade, gpa } = calculateFinalGrade(total, ranges);
+
+      map[std.id] = {
+        rawScore: Math.round(rawScore * 10) / 10,
+        bonus,
+        total,
+        grade,
+        gpa
+      };
+    });
+
+    return map;
+  }, [activeStudents, activeComponents, scoreMap, studentBonusMap, gradeRules]);
 
   // Filtered students by search query
   const filteredStudents = useMemo(() => {
@@ -242,6 +279,7 @@ export default function ScoresPage() {
 
   // Manual Save Handler
   const handleManualSave = async () => {
+    calculateGrades();
     await saveAccountData();
     setSaveSuccessToast(true);
     setTimeout(() => setSaveSuccessToast(false), 3000);
@@ -343,7 +381,7 @@ export default function ScoresPage() {
     }
   };
 
-  // Quick Action: Fill Max / Default to all students
+  // Quick Action: Fill Max to all students
   const handleFillAllScores = (comp: ScoreComponent, fillScore: number) => {
     const updates = filteredStudents.map(std => ({
       studentId: std.id,
@@ -353,7 +391,6 @@ export default function ScoresPage() {
 
     bulkUpdateScores(updates);
     setOpenColumnMenuId(null);
-    setIsFillDefaultOpen(false);
   };
 
   // Quick Action: Clear Column Scores
@@ -415,7 +452,7 @@ export default function ScoresPage() {
 
     let rows: string[][] = [];
     activeStudents.forEach(std => {
-      const res = gradeMap[std.id] || { total: 0, grade: "0", bonus: 0, gpa: 0 };
+      const res = studentGradeSummary[std.id] || { total: 0, grade: "0", bonus: 0, gpa: 0 };
       let row = [
         String(std.rollNo),
         std.prefix || "",
@@ -533,13 +570,13 @@ export default function ScoresPage() {
   // Grade Pill styling matching the screenshot
   const getGradePill = (grade: string) => {
     if (grade === "4" || grade === "3.5") {
-      return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30";
+      return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-bold";
     }
     if (grade === "3" || grade === "2.5") {
-      return "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30";
+      return "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 font-bold";
     }
     if (grade === "2" || grade === "1.5" || grade === "1") {
-      return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+      return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 font-bold";
     }
     return "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold";
   };
@@ -717,96 +754,104 @@ export default function ScoresPage() {
                 </th>
                 
                 {/* Dynamic Component Columns matching User's Image */}
-                {activeComponents.map((comp) => {
-                  const isMenuOpen = openColumnMenuId === comp.id;
-                  const isColFocused = focusedCell?.compId === comp.id;
+                {activeComponents.length === 0 ? (
+                  <th className="p-3 text-center border-r border-border text-muted-foreground font-normal">
+                    ยังไม่มีชิ้นงานเก็บคะแนน (กดปุ่ม &quot;+ เพิ่มงาน&quot; ด้านบนเพื่อเริ่มต้น)
+                  </th>
+                ) : (
+                  activeComponents.map((comp) => {
+                    const isMenuOpen = openColumnMenuId === comp.id;
+                    const isColFocused = focusedCell?.compId === comp.id;
 
-                  return (
-                    <th 
-                      key={comp.id} 
-                      className={`p-3 text-center border-r border-border min-w-[110px] hover:bg-muted/90 transition-colors relative group ${
-                        isColFocused ? "bg-emerald-500/10" : ""
-                      }`}
-                    >
-                      <div className="flex flex-col items-center justify-center">
-                        <span className="font-bold text-foreground text-xs truncate max-w-[95px]" title={comp.name}>
-                          {comp.name}
-                        </span>
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
-                          เต็ม {comp.maxScore} ({comp.weightPercent}%)
-                        </span>
-                      </div>
+                    return (
+                      <th 
+                        key={comp.id} 
+                        className={`p-3 text-center border-r border-border min-w-[110px] hover:bg-muted/90 transition-colors relative group ${
+                          isColFocused ? "bg-emerald-500/10" : ""
+                        }`}
+                      >
+                        <div className="flex flex-col items-center justify-center">
+                          <span className="font-bold text-foreground text-xs truncate max-w-[95px]" title={comp.name}>
+                            {comp.name}
+                          </span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                            เต็ม {comp.maxScore} ({comp.weightPercent}%)
+                          </span>
+                        </div>
 
-                      {/* Hover action toolbar directly on column header (ลบงาน / แก้ไข สะดวก) */}
-                      <div className="absolute right-1 top-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-background/95 dark:bg-card/95 backdrop-blur-sm p-0.5 rounded-lg border border-border shadow-sm">
-                        <button
-                          onClick={() => handleOpenEditComponent(comp)}
-                          className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-emerald-600 transition-colors"
-                          title="แก้ไขชิ้นงาน"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteComponent(comp.id, comp.name)}
-                          className="p-1 hover:bg-rose-500/10 rounded text-muted-foreground hover:text-rose-600 transition-colors"
-                          title="ลบชิ้นงานนี้"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={() => setOpenColumnMenuId(isMenuOpen ? null : comp.id)}
-                          className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
-                          title="เมนูเพิ่มเติม"
-                        >
-                          <MoreVertical className="h-3 w-3" />
-                        </button>
-                      </div>
-
-                      {/* Column Dropdown Menu */}
-                      {isMenuOpen && (
-                        <div className="absolute right-0 top-full mt-1 w-48 rounded-2xl bg-card border border-border p-1.5 shadow-2xl z-50 animate-in zoom-in-95 duration-150 text-left">
+                        {/* Hover action toolbar directly on column header (ลบงาน / แก้ไข สะดวก) */}
+                        <div className="absolute right-1 top-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-background/95 dark:bg-card/95 backdrop-blur-sm p-0.5 rounded-lg border border-border shadow-sm">
                           <button
-                            onClick={() => {
-                              setActiveCompForPaste(comp.id);
-                              setIsPasteOpen(true);
-                              setOpenColumnMenuId(null);
-                            }}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
+                            onClick={() => handleOpenEditComponent(comp)}
+                            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-emerald-600 transition-colors"
+                            title="แก้ไขชิ้นงาน"
                           >
-                            <ClipboardPaste className="h-3.5 w-3.5 text-blue-500" />
-                            วางคะแนนจาก Excel
+                            <Pencil className="h-3 w-3" />
                           </button>
                           <button
-                            onClick={() => handleFillAllScores(comp, comp.maxScore)}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
+                            onClick={() => handleDeleteComponent(comp.id, comp.name)}
+                            className="p-1 hover:bg-rose-500/10 rounded text-muted-foreground hover:text-rose-600 transition-colors"
+                            title="ลบชิ้นงานนี้"
                           >
-                            <Check className="h-3.5 w-3.5 text-emerald-500" />
-                            ให้คะแนนเต็มทุกคน ({comp.maxScore})
+                            <Trash2 className="h-3 w-3" />
                           </button>
                           <button
-                            onClick={() => handleClearColumnScores(comp)}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 rounded-xl"
+                            onClick={() => setOpenColumnMenuId(isMenuOpen ? null : comp.id)}
+                            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+                            title="เมนูเพิ่มเติม"
                           >
-                            <RotateCcw className="h-3.5 w-3.5" />
-                            ล้างคะแนนในช่องนี้
+                            <MoreVertical className="h-3 w-3" />
                           </button>
                         </div>
-                      )}
-                    </th>
-                  );
-                })}
 
-                {/* Inline "+ เพิ่มงาน" button at end of column list */}
-                <th className="p-3 w-16 text-center border-r border-border">
-                  <button
-                    onClick={handleOpenAddComp}
-                    className="p-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-all font-bold text-[11px] inline-flex items-center gap-1"
-                    title="เพิ่มชิ้นงานใหม่"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>เพิ่ม</span>
-                  </button>
-                </th>
+                        {/* Column Dropdown Menu */}
+                        {isMenuOpen && (
+                          <div className="absolute right-0 top-full mt-1 w-48 rounded-2xl bg-card border border-border p-1.5 shadow-2xl z-50 animate-in zoom-in-95 duration-150 text-left">
+                            <button
+                              onClick={() => {
+                                setActiveCompForPaste(comp.id);
+                                setIsPasteOpen(true);
+                                setOpenColumnMenuId(null);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
+                            >
+                              <ClipboardPaste className="h-3.5 w-3.5 text-blue-500" />
+                              วางคะแนนจาก Excel
+                            </button>
+                            <button
+                              onClick={() => handleFillAllScores(comp, comp.maxScore)}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
+                            >
+                              <Check className="h-3.5 w-3.5 text-emerald-500" />
+                              ให้คะแนนเต็มทุกคน ({comp.maxScore})
+                            </button>
+                            <button
+                              onClick={() => handleClearColumnScores(comp)}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 rounded-xl"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              ล้างคะแนนในช่องนี้
+                            </button>
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })
+                )}
+
+                {/* Inline "+ เพิ่มงาน" button at end of column list if activeComponents exist */}
+                {activeComponents.length > 0 && (
+                  <th className="p-3 w-16 text-center border-r border-border">
+                    <button
+                      onClick={handleOpenAddComp}
+                      className="p-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-all font-bold text-[11px] inline-flex items-center gap-1"
+                      title="เพิ่มชิ้นงานใหม่"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>เพิ่ม</span>
+                    </button>
+                  </th>
+                )}
 
                 {/* Summaries Headers */}
                 <th className="p-3 w-16 text-center bg-amber-500/5 text-amber-600 border-r border-border font-bold">
@@ -825,13 +870,13 @@ export default function ScoresPage() {
             <tbody className="divide-y divide-border">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={activeComponents.length + 6} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={activeComponents.length + (activeComponents.length > 0 ? 6 : 5)} className="p-12 text-center text-muted-foreground">
                     <p className="font-bold text-sm text-foreground">ไม่พบรายชื่อนักเรียน</p>
                   </td>
                 </tr>
               ) : (
                 filteredStudents.map((std, stdIdx) => {
-                  const result = gradeMap[std.id] || { total: 0, grade: "0", bonus: 0, gpa: 0, isLocked: false };
+                  const summary = studentGradeSummary[std.id] || { rawScore: 0, bonus: 0, total: 0, grade: "0", gpa: 0 };
                   const isCurrentRowFocused = focusedCell?.studentId === std.id;
                   
                   return (
@@ -849,51 +894,64 @@ export default function ScoresPage() {
                         {std.prefix}{std.firstName} {std.lastName}
                       </td>
 
-                      {/* Dynamic Score Cells (Auto-select on focus, no need to delete 0) */}
-                      {activeComponents.map((comp, compIdx) => {
-                        const rawVal = scoreMap[`${std.id}_${comp.id}`];
-                        const scoreVal = rawVal !== undefined ? rawVal : 0;
-                        const isCellFocused = focusedCell?.studentId === std.id && focusedCell?.compId === comp.id;
+                      {/* Case 1: No Score Components yet */}
+                      {activeComponents.length === 0 ? (
+                        <td className="p-3 text-center border-r border-border text-muted-foreground italic">
+                          -
+                        </td>
+                      ) : (
+                        // Case 2: Dynamic Score Cells (Auto-select on focus, no need to delete 0)
+                        activeComponents.map((comp, compIdx) => {
+                          const rawVal = scoreMap[`${std.id}_${comp.id}`];
+                          const scoreVal = rawVal !== undefined ? rawVal : 0;
+                          const isCellFocused = focusedCell?.studentId === std.id && focusedCell?.compId === comp.id;
 
-                        return (
-                          <td 
-                            key={comp.id} 
-                            className={`p-1 text-center border-r border-border relative transition-all ${
-                              isCellFocused ? "bg-emerald-500/15 ring-2 ring-emerald-500/40 rounded-xl" : ""
-                            }`}
-                          >
-                            <input
-                              type="number"
-                              id={`score-${std.id}-${comp.id}`}
-                              value={scoreVal}
-                              onChange={(e) => handleScoreChange(std.id, comp, e.target.value)}
-                              onKeyDown={(e) => handleInputKeyDown(e, stdIdx, compIdx)}
-                              onFocus={(e) => {
-                                setFocusedCell({ studentId: std.id, compId: comp.id, stdIdx, compIdx });
-                                e.target.select(); // Auto-selects number so typing replaces 0 immediately!
-                              }}
-                              min={0}
-                              max={comp.maxScore}
-                              step={0.5}
-                              className="w-full text-center font-bold py-1.5 outline-none rounded-xl transition-all text-foreground bg-transparent focus:bg-background focus:ring-2 focus:ring-emerald-500 shadow-none"
-                            />
-                          </td>
-                        );
-                      })}
+                          return (
+                            <td 
+                              key={comp.id} 
+                              className={`p-1 text-center border-r border-border relative transition-all ${
+                                isCellFocused ? "bg-emerald-500/15 ring-2 ring-emerald-500/40 rounded-xl" : ""
+                              }`}
+                            >
+                              <input
+                                type="number"
+                                id={`score-${std.id}-${comp.id}`}
+                                value={scoreVal}
+                                onChange={(e) => handleScoreChange(std.id, comp, e.target.value)}
+                                onKeyDown={(e) => handleInputKeyDown(e, stdIdx, compIdx)}
+                                onFocus={(e) => {
+                                  setFocusedCell({ studentId: std.id, compId: comp.id, stdIdx, compIdx });
+                                  e.target.select(); // Auto-selects number so typing replaces 0 immediately!
+                                }}
+                                min={0}
+                                max={comp.maxScore}
+                                step={0.5}
+                                className="w-full text-center font-bold py-1.5 outline-none rounded-xl transition-all text-foreground bg-transparent focus:bg-background focus:ring-2 focus:ring-emerald-500 shadow-none"
+                              />
+                            </td>
+                          );
+                        })
+                      )}
 
-                      {/* Extra spacer for inline Add column */}
-                      <td className="p-1 border-r border-border bg-muted/5 text-center"></td>
+                      {/* Spacer for inline Add button if components exist */}
+                      {activeComponents.length > 0 && (
+                        <td className="p-1 border-r border-border bg-muted/5 text-center"></td>
+                      )}
 
-                      {/* Summaries Columns */}
+                      {/* จิตพิสัย (Synchronized directly with Bonus Page) */}
                       <td className="p-3 text-center font-bold bg-amber-500/5 text-amber-600 dark:text-amber-400 border-r border-border">
-                        {result.bonus > 0 ? `+${result.bonus}` : result.bonus}
+                        {summary.bonus > 0 ? `+${summary.bonus}` : summary.bonus}
                       </td>
+
+                      {/* คะแนนรวม (Raw Score + Bonus Score) */}
                       <td className="p-3 text-center font-bold bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border-r border-border">
-                        {result.total}
+                        {summary.total}
                       </td>
+
+                      {/* เกรด (Live Calculated Grade) */}
                       <td className="p-3 text-center font-bold">
-                        <span className={`px-2.5 py-0.5 rounded-lg text-xs border font-bold ${getGradePill(result.grade)}`}>
-                          {result.grade}
+                        <span className={`px-2.5 py-0.5 rounded-lg text-xs border font-bold ${getGradePill(summary.grade)}`}>
+                          {summary.grade}
                         </span>
                       </td>
                     </tr>
@@ -1000,13 +1058,13 @@ export default function ScoresPage() {
               {/* Direct score input */}
               <div className="flex flex-col items-center gap-1.5">
                 <span className="text-xs font-bold text-muted-foreground">
-                  คะแนน (เต็ม {currentSpeedComp.maxScore})
+                  คะแนน (เต็ม {currentSpeedComp?.maxScore || 10})
                 </span>
                 <input
                   ref={speedInputRef}
                   type="number"
                   value={currentSpeedScore ?? 0}
-                  onChange={(e) => handleScoreChange(currentSpeedStudent.id, currentSpeedComp, e.target.value)}
+                  onChange={(e) => currentSpeedComp && handleScoreChange(currentSpeedStudent.id, currentSpeedComp, e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -1017,7 +1075,7 @@ export default function ScoresPage() {
                   }}
                   onFocus={(e) => e.target.select()}
                   min={0}
-                  max={currentSpeedComp.maxScore}
+                  max={currentSpeedComp?.maxScore || 10}
                   step={0.5}
                   className="w-24 h-12 rounded-2xl border-2 border-emerald-500/40 bg-background text-center text-2xl font-black text-emerald-600 dark:text-emerald-400 outline-none focus:border-emerald-500"
                 />
@@ -1025,26 +1083,28 @@ export default function ScoresPage() {
             </div>
 
             {/* Quick Tap Score Presets */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold text-muted-foreground">
-                แตะคะแนนด่วน (บันทึกและเลื่อนไปคนถัดไปทันที):
-              </span>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {getQuickScorePills(currentSpeedComp.maxScore).map((pill) => (
-                  <button
-                    key={pill}
-                    onClick={() => handleApplySpeedScore(pill)}
-                    className={`py-2.5 px-2 rounded-2xl font-bold text-xs transition-all active:scale-95 shadow-sm border ${
-                      currentSpeedScore === pill
-                        ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20"
-                        : "bg-card border-border hover:bg-muted text-foreground"
-                    }`}
-                  >
-                    {pill === currentSpeedComp.maxScore ? `เต็ม (${pill})` : `${pill} คะแนน`}
-                  </button>
-                ))}
+            {currentSpeedComp && (
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-muted-foreground">
+                  แตะคะแนนด่วน (บันทึกและเลื่อนไปคนถัดไปทันที):
+                </span>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {getQuickScorePills(currentSpeedComp.maxScore).map((pill) => (
+                    <button
+                      key={pill}
+                      onClick={() => handleApplySpeedScore(pill)}
+                      className={`py-2.5 px-2 rounded-2xl font-bold text-xs transition-all active:scale-95 shadow-sm border ${
+                        currentSpeedScore === pill
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20"
+                          : "bg-card border-border hover:bg-muted text-foreground"
+                      }`}
+                    >
+                      {pill === currentSpeedComp.maxScore ? `เต็ม (${pill})` : `${pill} คะแนน`}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Footer Navigation */}
             <div className="flex items-center justify-between border-t border-border pt-4">
@@ -1312,6 +1372,7 @@ export default function ScoresPage() {
                     <option value={2}>+2 คะแนน</option>
                     <option value={3}>+3 คะแนน</option>
                     <option value={5}>+5 คะแนน</option>
+                    <option value={10}>+10 คะแนน</option>
                     <option value={-1}>-1 คะแนน (หักคะแนน)</option>
                     <option value={-2}>-2 คะแนน (หักคะแนน)</option>
                   </select>

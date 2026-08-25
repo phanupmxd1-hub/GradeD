@@ -1503,8 +1503,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         });
 
         const studentBonus = state.bonusScores
-          .filter(b => b.studentId === std.id && b.subjectId === state.activeSubjectId && b.semesterId === state.activeSemesterId)
-          .reduce((sum, b) => sum + b.points, 0);
+          .filter(b => b.studentId === std.id && (!b.subjectId || b.subjectId === state.activeSubjectId) && (!b.semesterId || b.semesterId === state.activeSemesterId))
+          .reduce((sum, b) => sum + (Number(b.points) || 0), 0);
 
         const totalScore = Math.min(100, Math.max(0, rawScore + studentBonus));
         

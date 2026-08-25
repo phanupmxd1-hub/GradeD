@@ -14,20 +14,6 @@ export function generateUUID(): string {
   });
 }
 
-// Global debounce timer for automatic cloud synchronization
-let _autoSaveTimer: NodeJS.Timeout | null = null;
-export function triggerAutoSave() {
-  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
-  _autoSaveTimer = setTimeout(() => {
-    try {
-      const state = useGMSStore.getState();
-      if (state.isDataLoaded && state.currentAccountEmail) {
-        state.saveAccountData();
-      }
-    } catch (e) {}
-  }, 1200);
-}
-
 // TypeScript Interfaces based on PostgreSQL / Supabase Schema
 export interface School {
   id: string;
@@ -287,6 +273,9 @@ interface GMSState {
   undoStack: string[];
   redoStack: string[];
 
+  hasUnsavedChanges: boolean;
+  setHasUnsavedChanges: (val: boolean) => void;
+
   setActiveSchoolId: (id: string) => void;
   setActiveAcademicYearId: (id: string) => void;
   setActiveSemesterId: (id: string) => void;
@@ -368,8 +357,11 @@ export const useGMSStore = create<GMSState>()((set, get) => {
     syncStatus: "idle",
     syncError: null,
     lastSavedTime: null,
+    hasUnsavedChanges: false,
     undoStack: [],
     redoStack: [],
+
+    setHasUnsavedChanges: (val: boolean) => set({ hasUnsavedChanges: val }),
 
     loadAccountData: async (email: string) => {
       if (!email) return;
@@ -523,11 +515,14 @@ export const useGMSStore = create<GMSState>()((set, get) => {
                 mappedSubjects.forEach((sub: any) => {
                   const sem = mappedSemesters[0];
                   defaultComps.push(
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "ใบงานที่ 1", type: "assignment", maxScore: 10, weightPercent: 10, order: 1 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "ใบงานที่ 2", type: "assignment", maxScore: 10, weightPercent: 10, order: 2 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "ทดสอบท้ายบท", type: "quiz", maxScore: 20, weightPercent: 20, order: 3 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "สอบกลางภาค", type: "exam", maxScore: 30, weightPercent: 30, order: 4 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "สอบปลายภาค", type: "exam", maxScore: 30, weightPercent: 30, order: 5 }
+                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 1", type: "assignment", maxScore: 10, weightPercent: 10, order: 1 },
+                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 2", type: "assignment", maxScore: 10, weightPercent: 10, order: 2 },
+                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 3", type: "assignment", maxScore: 10, weightPercent: 10, order: 3 },
+                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "สอบกลางภาค", type: "exam", maxScore: 20, weightPercent: 20, order: 4 },
+                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 4", type: "assignment", maxScore: 10, weightPercent: 10, order: 5 },
+                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 5", type: "assignment", maxScore: 10, weightPercent: 10, order: 6 },
+                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 6", type: "assignment", maxScore: 10, weightPercent: 10, order: 7 },
+                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "สอบปลายภาค", type: "exam", maxScore: 20, weightPercent: 20, order: 8 }
                   );
                 });
               });
@@ -572,7 +567,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               classroomId: gr.classroom_id || gr.classroomid || mappedClassrooms[0]?.id || "",
               rawScoreSum: Number(gr.raw_score_sum),
               bonusScoreSum: Number(gr.bonus_score_sum),
-              totalScore: Number(gr.total_score),
+              totalScore: Number(gr.totalScore) || Number(gr.total_score) || 0,
               grade: gr.grade,
               gpaPoints: Number(gr.gpa_points),
               isLocked: Boolean(gr.is_locked),
@@ -624,6 +619,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               gradeResults: mappedResults,
               currentAccountEmail: normalized,
               isDataLoaded: true,
+              hasUnsavedChanges: false,
               undoStack: [],
               redoStack: []
             });
@@ -637,7 +633,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       }
 
       // Fallback
-      set({ isDataLoaded: true });
+      set({ isDataLoaded: true, hasUnsavedChanges: false });
     },
 
     saveAccountData: async () => {
@@ -884,7 +880,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         set({
           syncStatus: "saved",
           syncError: null,
-          lastSavedTime: timeStr
+          lastSavedTime: timeStr,
+          hasUnsavedChanges: false
         });
 
         setTimeout(() => {
@@ -970,6 +967,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         scores: newScores,
         gradeResults: [...state.gradeResults, newGradeResult],
         classrooms: updatedClassrooms,
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -983,13 +981,12 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       });
-
-      triggerAutoSave();
     },
 
     updateStudent: (student) => {
       set((state) => ({
         students: state.students.map(s => s.id === student.id ? student : s),
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1003,7 +1000,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       }));
-      triggerAutoSave();
     },
 
     deleteStudent: (id) => {
@@ -1040,6 +1036,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         attendanceRecords: state.attendanceRecords.filter(r => r.studentId !== id),
         bonusScores: state.bonusScores.filter(b => b.studentId !== id),
         gradeResults: state.gradeResults.filter(g => g.studentId !== id),
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1053,8 +1050,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       });
-
-      triggerAutoSave();
     },
 
     bulkAddStudents: (newStds) => {
@@ -1130,6 +1125,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         scores: newScores,
         gradeResults: [...state.gradeResults, ...addedGradeResults],
         classrooms: updatedClassrooms,
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1143,8 +1139,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       });
-
-      triggerAutoSave();
     },
 
     bulkMoveStudents: (studentIds, targetClassroomId) => {
@@ -1155,13 +1149,12 @@ export const useGMSStore = create<GMSState>()((set, get) => {
 
       set({
         students: updatedStudents,
+        hasUnsavedChanges: true,
         classrooms: state.classrooms.map(c => {
           const count = updatedStudents.filter(s => s.classroomId === c.id).length;
           return { ...c, studentCount: count };
         })
       });
-
-      triggerAutoSave();
     },
 
     promoteStudents: (studentIds, targetClassroomId) => {
@@ -1203,10 +1196,10 @@ export const useGMSStore = create<GMSState>()((set, get) => {
 
       set({
         attendanceSessions: [...state.attendanceSessions, newSession],
-        attendanceRecords: [...state.attendanceRecords, ...newRecords]
+        attendanceRecords: [...state.attendanceRecords, ...newRecords],
+        hasUnsavedChanges: true
       });
 
-      triggerAutoSave();
       return newId;
     },
 
@@ -1231,8 +1224,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         }];
       }
 
-      set({ attendanceRecords: newRecords });
-      triggerAutoSave();
+      set({ attendanceRecords: newRecords, hasUnsavedChanges: true });
     },
 
     bulkCheckAttendance: (sessionId, status) => {
@@ -1243,15 +1235,14 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         }
         return r;
       });
-      set({ attendanceRecords: newRecords });
-      triggerAutoSave();
+      set({ attendanceRecords: newRecords, hasUnsavedChanges: true });
     },
 
     updateAttendanceSession: (id, date, sessionNo) => {
       set((state) => ({
-        attendanceSessions: state.attendanceSessions.map(s => s.id === id ? { ...s, date, sessionNo } : s)
+        attendanceSessions: state.attendanceSessions.map(s => s.id === id ? { ...s, date, sessionNo } : s),
+        hasUnsavedChanges: true
       }));
-      triggerAutoSave();
     },
 
     deleteAttendanceSession: (id) => {
@@ -1261,9 +1252,9 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       } catch (e) {}
       set((state) => ({
         attendanceSessions: state.attendanceSessions.filter(s => s.id !== id),
-        attendanceRecords: state.attendanceRecords.filter(r => r.sessionId !== id)
+        attendanceRecords: state.attendanceRecords.filter(r => r.sessionId !== id),
+        hasUnsavedChanges: true
       }));
-      triggerAutoSave();
     },
 
     addScoreComponent: (comp) => {
@@ -1294,17 +1285,16 @@ export const useGMSStore = create<GMSState>()((set, get) => {
 
       set({
         scoreComponents: [...state.scoreComponents, newComp],
-        scores: newScores
+        scores: newScores,
+        hasUnsavedChanges: true
       });
-
-      triggerAutoSave();
     },
 
     updateScoreComponent: (comp) => {
       set((state) => ({
-        scoreComponents: state.scoreComponents.map(c => c.id === comp.id ? comp : c)
+        scoreComponents: state.scoreComponents.map(c => c.id === comp.id ? comp : c),
+        hasUnsavedChanges: true
       }));
-      triggerAutoSave();
     },
 
     deleteScoreComponent: (id) => {
@@ -1314,9 +1304,9 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       } catch (e) {}
       set((state) => ({
         scoreComponents: state.scoreComponents.filter(c => c.id !== id),
-        scores: state.scores.filter(s => s.scoreComponentId !== id)
+        scores: state.scores.filter(s => s.scoreComponentId !== id),
+        hasUnsavedChanges: true
       }));
-      triggerAutoSave();
     },
 
     updateScore: (studentId, scoreComponentId, scoreVal, remarks) => {
@@ -1352,9 +1342,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         }];
       }
 
-      set({ scores: newScores });
+      set({ scores: newScores, hasUnsavedChanges: true });
       get().calculateGrades();
-      triggerAutoSave();
     },
 
     bulkUpdateScores: (updates) => {
@@ -1386,9 +1375,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         }
       });
 
-      set({ scores: newScores });
+      set({ scores: newScores, hasUnsavedChanges: true });
       get().calculateGrades();
-      triggerAutoSave();
     },
 
     pushScoreHistory: () => {
@@ -1410,10 +1398,10 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       set({
         scores: JSON.parse(previous),
         undoStack: newUndo,
-        redoStack: [...state.redoStack, current]
+        redoStack: [...state.redoStack, current],
+        hasUnsavedChanges: true
       });
       state.calculateGrades();
-      triggerAutoSave();
     },
 
     redoScore: () => {
@@ -1427,10 +1415,10 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       set({
         scores: JSON.parse(next),
         redoStack: newRedo,
-        undoStack: [...state.undoStack, current]
+        undoStack: [...state.undoStack, current],
+        hasUnsavedChanges: true
       });
       state.calculateGrades();
-      triggerAutoSave();
     },
 
     addBonusScore: (studentId, points, reason) => {
@@ -1448,6 +1436,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
 
       set({
         bonusScores: [...state.bonusScores, newBonus],
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1463,17 +1452,16 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       });
 
       get().calculateGrades();
-      triggerAutoSave();
     },
 
     updateBonusScore: (id, points, reason) => {
       set((state) => ({
         bonusScores: state.bonusScores.map(b => 
           b.id === id ? { ...b, points, reason } : b
-        )
+        ),
+        hasUnsavedChanges: true
       }));
       get().calculateGrades();
-      triggerAutoSave();
     },
 
     deleteBonusScore: (id) => {
@@ -1481,10 +1469,10 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         supabase.from("bonus_scores").delete().eq("id", id).then();
       } catch (e) {}
       set((state) => ({
-        bonusScores: state.bonusScores.filter(b => b.id !== id)
+        bonusScores: state.bonusScores.filter(b => b.id !== id),
+        hasUnsavedChanges: true
       }));
       get().calculateGrades();
-      triggerAutoSave();
     },
 
     calculateGrades: () => {
@@ -1566,9 +1554,9 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           (r.studentId === studentId && r.subjectId === state.activeSubjectId && r.semesterId === state.activeSemesterId)
             ? { ...r, grade, gpaPoints, updatedAt: new Date().toISOString() } 
             : r
-        )
+        ),
+        hasUnsavedChanges: true
       }));
-      triggerAutoSave();
     },
 
     toggleGradeLock: (studentId) => {
@@ -1577,9 +1565,9 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           (r.studentId === studentId && r.subjectId === state.activeSubjectId && r.semesterId === state.activeSemesterId)
             ? { ...r, isLocked: !r.isLocked, updatedAt: new Date().toISOString() } 
             : r
-        )
+        ),
+        hasUnsavedChanges: true
       }));
-      triggerAutoSave();
     },
 
     addAuditLog: (action, resourceType, resourceId, description) => set((state) => ({
@@ -1594,12 +1582,14 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           description,
           timestamp: new Date().toISOString()
         }
-      ]
+      ],
+      hasUnsavedChanges: true
     })),
 
     updateGradeRules: (ranges) => {
       set((state) => ({
         gradeRules: { ...state.gradeRules, ranges },
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1614,7 +1604,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         ]
       }));
       get().calculateGrades();
-      triggerAutoSave();
     },
 
     addClassroom: (name, teacherId) => {
@@ -1632,6 +1621,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       set({
         classrooms: [...state.classrooms, newClassroom],
         activeClassroomId: newId,
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1645,12 +1635,12 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       });
-      triggerAutoSave();
     },
 
     updateClassroom: (classroom) => {
       set((state) => ({
         classrooms: state.classrooms.map(c => c.id === classroom.id ? classroom : c),
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1664,7 +1654,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       }));
-      triggerAutoSave();
     },
 
     deleteClassroom: (id) => {
@@ -1679,6 +1668,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         classrooms: remainingClassrooms,
         students: state.students.filter(s => s.classroomId !== id),
         activeClassroomId: newActiveId,
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1692,7 +1682,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       });
-      triggerAutoSave();
     },
 
     addAcademicYear: (year) => {
@@ -1709,16 +1698,16 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         academicYears: [...state.academicYears, newYear],
         semesters: [...state.semesters, sem1, sem2],
         activeAcademicYearId: id,
-        activeSemesterId: sem1.id
+        activeSemesterId: sem1.id,
+        hasUnsavedChanges: true
       });
-      triggerAutoSave();
     },
 
     updateAcademicYear: (id, year) => {
       set((state) => ({
-        academicYears: state.academicYears.map(ay => ay.id === id ? { ...ay, year: Number(year) } : ay)
+        academicYears: state.academicYears.map(ay => ay.id === id ? { ...ay, year: Number(year) } : ay),
+        hasUnsavedChanges: true
       }));
-      triggerAutoSave();
     },
 
     deleteAcademicYear: (id) => {
@@ -1754,9 +1743,9 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         classrooms: remainingClassrooms,
         activeAcademicYearId: newActiveYearId,
         activeSemesterId: newActiveSemesterId,
-        activeClassroomId: newActiveClassroomId
+        activeClassroomId: newActiveClassroomId,
+        hasUnsavedChanges: true
       });
-      triggerAutoSave();
     },
 
     addSubject: (code, name, creditPoints, hoursPerWeek) => {
@@ -1774,6 +1763,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       set({
         subjects: [...state.subjects, newSubject],
         activeSubjectId: newId,
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1787,12 +1777,12 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       });
-      triggerAutoSave();
     },
 
     updateSubject: (subject) => {
       set((state) => ({
         subjects: state.subjects.map(s => s.id === subject.id ? subject : s),
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1806,7 +1796,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       }));
-      triggerAutoSave();
     },
 
     deleteSubject: (id) => {
@@ -1817,6 +1806,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       } catch (e) {}
       set({
         subjects: state.subjects.filter(s => s.id !== id),
+        hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
           {
@@ -1830,7 +1820,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       });
-      triggerAutoSave();
     },
 
     updateSystemSettings: (settings) => {
@@ -1840,9 +1829,9 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         subTitle: settings.subTitle !== undefined ? settings.subTitle : state.subTitle,
         teacherName: settings.teacherName !== undefined ? settings.teacherName : state.teacherName,
         teacherAvatar: settings.teacherAvatar !== undefined ? settings.teacherAvatar : state.teacherAvatar,
-        schoolLogo: settings.schoolLogo !== undefined ? settings.schoolLogo : state.schoolLogo
+        schoolLogo: settings.schoolLogo !== undefined ? settings.schoolLogo : state.schoolLogo,
+        hasUnsavedChanges: true
       }));
-      triggerAutoSave();
     }
   };
 });

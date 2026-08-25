@@ -25,16 +25,13 @@ import {
   MoreVertical,
   Check,
   RotateCcw,
-  Play,
-  ArrowRight,
-  ArrowLeft,
+  Save,
+  Loader2,
   X,
   ChevronRight,
   ChevronLeft,
-  Maximize2,
-  Minimize2,
-  Filter,
-  CheckSquare
+  HelpCircle,
+  Pencil
 } from "lucide-react";
 
 export default function ScoresPage() {
@@ -65,7 +62,9 @@ export default function ScoresPage() {
     calculateGrades,
     saveAccountData,
     syncStatus,
-    lastSavedTime
+    syncError,
+    lastSavedTime,
+    hasUnsavedChanges
   } = useGMSStore();
 
   // Active Context metadata
@@ -108,12 +107,34 @@ export default function ScoresPage() {
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
-  const [gradeFilter, setGradeFilter] = useState<string>("ALL");
-  const [selectedCompFilter, setSelectedCompFilter] = useState<string>("ALL");
 
   // Save feedback state
-  const [savingCell, setSavingCell] = useState<string | null>(null);
-  const [focusedCell, setFocusedCell] = useState<{ studentId: string; compId: string } | null>(null);
+  const [focusedCell, setFocusedCell] = useState<{ studentId: string; compId: string; stdIdx: number; compIdx: number } | null>(null);
+  const [saveSuccessToast, setSaveSuccessToast] = useState(false);
+
+  // Keyboard shortcut Ctrl+S / Cmd+S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleManualSave();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Warn before closing if there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = "คุณมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // Active students sorted by roll number
   const activeStudents = useMemo(() => {
@@ -169,64 +190,19 @@ export default function ScoresPage() {
     return map;
   }, [gradeResults, activeSubjectId, activeSemesterId]);
 
-  // Filtered students by search query and grade filter
+  // Filtered students by search query
   const filteredStudents = useMemo(() => {
     return activeStudents.filter(std => {
-      const matchQuery = !searchQuery.trim() || 
-        std.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        std.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(std.rollNo).includes(searchQuery.trim());
-
-      if (!matchQuery) return false;
-
-      const res = gradeMap[std.id];
-      if (gradeFilter === "ALL") return true;
-      if (gradeFilter === "GRADE_4") return res?.grade === "4";
-      if (gradeFilter === "GRADE_0") return res?.grade === "0";
-      if (gradeFilter === "UNGRADED") {
-        if (selectedCompFilter !== "ALL") {
-          return scoreMap[`${std.id}_${selectedCompFilter}`] === undefined;
-        }
-        return activeComponents.some(c => scoreMap[`${std.id}_${c.id}`] === undefined);
-      }
-      if (gradeFilter === "PASSED") return res && res.grade !== "0";
-
-      return true;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        std.firstName.toLowerCase().includes(q) ||
+        std.lastName.toLowerCase().includes(q) ||
+        `${std.prefix}${std.firstName} ${std.lastName}`.toLowerCase().includes(q) ||
+        String(std.rollNo).includes(q)
+      );
     });
-  }, [activeStudents, searchQuery, gradeFilter, selectedCompFilter, gradeMap, activeComponents, scoreMap]);
-
-  // Live Overall Class Analytics
-  const classAnalytics = useMemo(() => {
-    let totalGradedStudents = 0;
-    let sumGpa = 0;
-    let countGpa = 0;
-    let gradeCounts: Record<string, number> = { "4": 0, "3.5": 0, "3": 0, "2.5": 0, "2": 0, "1.5": 0, "1": 0, "0": 0 };
-
-    activeStudents.forEach(std => {
-      const res = gradeMap[std.id];
-      if (res) {
-        if (gradeCounts[res.grade] !== undefined) {
-          gradeCounts[res.grade]++;
-        }
-        sumGpa += res.gpa;
-        countGpa++;
-        
-        const hasScore = activeComponents.some(c => scoreMap[`${std.id}_${c.id}`] !== undefined);
-        if (hasScore) totalGradedStudents++;
-      }
-    });
-
-    const meanGPA = countGpa > 0 ? (sumGpa / countGpa).toFixed(2) : "0.00";
-    const passCount = countGpa - (gradeCounts["0"] || 0);
-    const passRate = countGpa > 0 ? Math.round((passCount / countGpa) * 100) : 100;
-
-    return {
-      totalGradedStudents,
-      meanGPA,
-      passRate,
-      gradeCounts
-    };
-  }, [activeStudents, gradeMap, activeComponents, scoreMap]);
+  }, [activeStudents, searchQuery]);
 
   // Calculation for columns statistics
   const columnStats = useMemo(() => {
@@ -263,6 +239,13 @@ export default function ScoresPage() {
 
     return stats;
   }, [activeComponents, activeStudents, scoreMap]);
+
+  // Manual Save Handler
+  const handleManualSave = async () => {
+    await saveAccountData();
+    setSaveSuccessToast(true);
+    setTimeout(() => setSaveSuccessToast(false), 3000);
+  };
 
   // Active Speed Grading Component & Student
   const currentSpeedComp = activeComponents.find(c => c.id === speedCompId) || activeComponents[0];
@@ -313,12 +296,10 @@ export default function ScoresPage() {
     }
   };
 
+  // Score Input Change with smart zero overwrite (ไม่ต้องลบเลข 0 ให้กรอกได้เลย)
   const handleScoreChange = (studentId: string, comp: ScoreComponent, valString: string) => {
     if (valString === "") {
-      const cellId = `${studentId}_${comp.id}`;
-      setSavingCell(cellId);
       updateScore(studentId, comp.id, 0);
-      setTimeout(() => setSavingCell(null), 300);
       return;
     }
 
@@ -326,18 +307,29 @@ export default function ScoresPage() {
     if (isNaN(val)) return;
     
     if (val > comp.maxScore) {
-      alert(`⚠️ คะแนนห้ามเกินคะแนนเต็ม (${comp.maxScore} คะแนน) สำหรับช่อง ${comp.name}`);
+      alert(`⚠️ คะแนนห้ามเกินคะแนนเต็ม (${comp.maxScore} คะแนน) สำหรับช่อง "${comp.name}"`);
       return;
     }
     if (val < 0) return;
 
-    const cellId = `${studentId}_${comp.id}`;
-    setSavingCell(cellId);
     updateScore(studentId, comp.id, val);
-    
-    setTimeout(() => {
-      setSavingCell(null);
-    }, 300);
+  };
+
+  // Quick Score Button Click (แตะปุ่มลงคะแนนแล้วเลื่อนไปคนถัดไปทันที)
+  const handleQuickScoreButton = (scoreVal: number) => {
+    if (!focusedCell) return;
+    const { studentId, compId, stdIdx, compIdx } = focusedCell;
+    const comp = activeComponents.find(c => c.id === compId);
+    if (!comp) return;
+
+    updateScore(studentId, comp.id, scoreVal);
+
+    // Auto advance to next student
+    if (stdIdx < filteredStudents.length - 1) {
+      setTimeout(() => {
+        focusCell(stdIdx + 1, compIdx);
+      }, 50);
+    }
   };
 
   // Speed Grading Action (Apply Score and jump to next student immediately)
@@ -346,7 +338,6 @@ export default function ScoresPage() {
 
     updateScore(currentSpeedStudent.id, currentSpeedComp.id, val);
 
-    // Auto-advance to next student
     if (speedStudentIdx < activeStudents.length - 1) {
       setSpeedStudentIdx(prev => prev + 1);
     }
@@ -449,7 +440,17 @@ export default function ScoresPage() {
     document.body.removeChild(link);
   };
 
-  // Component Creator
+  // Open Add Component Modal with smart proposed name
+  const handleOpenAddComp = () => {
+    const nextNum = activeComponents.length + 1;
+    setCompName(`งาน ${nextNum}`);
+    setCompType("assignment");
+    setCompMaxScore(10);
+    setCompWeight(10);
+    setIsCompOpen(true);
+  };
+
+  // Component Creator Form Submit
   const handleAddComponentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!compName.trim()) return;
@@ -498,7 +499,7 @@ export default function ScoresPage() {
   };
 
   const handleDeleteComponent = (id: string, name: string) => {
-    if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบชิ้นงาน "${name}"? ข้อมูลคะแนนในช่องนี้จะถูกลบ`)) {
+    if (confirm(`คุณต้องการลบ "${name}" ใช่หรือไม่? ข้อมูลคะแนนในช่องนี้จะถูกลบ`)) {
       deleteScoreComponent(id);
       setOpenColumnMenuId(null);
     }
@@ -514,23 +515,22 @@ export default function ScoresPage() {
     setIsBonusOpen(false);
   };
 
-  // Helper Badge Color for Component Types
-  const getComponentTypeBadge = (type: ScoreComponent["type"]) => {
-    switch (type) {
-      case "assignment":
-        return { label: "ใบงาน", bg: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" };
-      case "quiz":
-        return { label: "สอบย่อย", bg: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" };
-      case "exam":
-        return { label: "สอบกลาง/ปลาย", bg: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" };
-      case "project":
-        return { label: "โครงงาน", bg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" };
-      default:
-        return { label: "อื่นๆ", bg: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20" };
+  // Quick Score pills for active focused column
+  const activeFocusedComp = focusedCell ? activeComponents.find(c => c.id === focusedCell.compId) : null;
+  const currentFocusedScore = focusedCell ? scoreMap[`${focusedCell.studentId}_${focusedCell.compId}`] : undefined;
+
+  // Preset values for quick scoring pills
+  const getQuickScorePills = (max: number) => {
+    const pills: number[] = [max];
+    if (max >= 10) {
+      pills.push(max * 0.9, max * 0.8, max * 0.7, max * 0.5, 0);
+    } else {
+      pills.push(max - 1, max - 2, 0);
     }
+    return Array.from(new Set(pills.filter(p => p >= 0))).sort((a, b) => b - a);
   };
 
-  // Helper Badge Color for Grade Pills
+  // Grade Pill styling matching the screenshot
   const getGradePill = (grade: string) => {
     if (grade === "4" || grade === "3.5") {
       return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30";
@@ -541,103 +541,392 @@ export default function ScoresPage() {
     if (grade === "2" || grade === "1.5" || grade === "1") {
       return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
     }
-    return "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30";
-  };
-
-  // Quick Score preset values based on max score
-  const getQuickScorePills = (max: number) => {
-    const pills: number[] = [max];
-    if (max >= 10) {
-      pills.push(max * 0.9, max * 0.8, max * 0.7, max * 0.5, 0);
-    } else {
-      pills.push(max - 1, max - 2, 0);
-    }
-    // Filter duplicates and negatives, sort descending
-    return Array.from(new Set(pills.filter(p => p >= 0))).sort((a, b) => b - a);
+    return "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold";
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 pb-16">
+    <div className="space-y-4 animate-in fade-in duration-300 pb-20">
       
-      {/* Top Hero Bar & Quick Speed Mode Entry */}
-      <div className="glass rounded-3xl p-5 md:p-6 border border-border flex flex-col lg:flex-row lg:items-center justify-between gap-6 shadow-sm">
+      {/* Top Action Bar: Save Button & Main Tools */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-card p-4 rounded-3xl border border-border shadow-sm">
         
-        {/* Left: Context info */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5 shadow-sm">
-              <BookOpen className="h-3.5 w-3.5" />
-              ห้อง {currentClass?.name || "ระบุห้องเรียน"}
-            </span>
-            <span className="text-xs font-bold px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-              {currentSubject ? `${currentSubject.code} ${currentSubject.name}` : "ระบุวิชาเรียน"}
-            </span>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground">
-              ปี {currentYear?.year || 2569} / เทอม {currentSemester?.semesterNo || 1}
-            </span>
-          </div>
-
-          <h2 className="text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
-            <GraduationCap className="h-7 w-7 text-emerald-600 shrink-0" />
-            ระบบบันทึกผลการเรียนและคะแนน
-          </h2>
-
-          <div className="flex items-center gap-3 text-xs font-semibold text-muted-foreground pt-0.5">
-            <span>น้ำหนักคะแนนรวม:</span>
-            <span className={`font-bold ${totalWeightPercent === 100 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-500"}`}>
-              {totalWeightPercent}% / 100%
-            </span>
-            {totalWeightPercent === 100 ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 inline" />
+        {/* Left: Save button & Status */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleManualSave}
+            disabled={syncStatus === "saving"}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-xs shadow-md active:scale-95 transition-all cursor-pointer ${
+              hasUnsavedChanges
+                ? "bg-emerald-600 hover:bg-emerald-500 text-white ring-2 ring-emerald-500/40 shadow-emerald-600/20"
+                : "bg-card border border-border text-foreground hover:bg-muted"
+            }`}
+            title="กดบันทึกข้อมูลลง Supabase (Ctrl+S)"
+          >
+            {syncStatus === "saving" ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                <span>กำลังบันทึกลงฐานข้อมูล...</span>
+              </>
             ) : (
-              <span className="text-[11px] text-amber-500">
-                (ควรตั้งน้ำหนักให้ครบ 100%)
-              </span>
+              <>
+                <Save className="h-4 w-4" />
+                <span>บันทึกข้อมูล (Ctrl+S)</span>
+              </>
             )}
-          </div>
+          </button>
+
+          {/* Save Status Badge */}
+          {hasUnsavedChanges ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
+              <AlertTriangle className="h-3 w-3" />
+              มีการแก้ไขที่ยังไม่ได้บันทึก
+            </span>
+          ) : lastSavedTime ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <CheckCircle2 className="h-3 w-3" />
+              บันทึกล่าสุด {lastSavedTime} น.
+            </span>
+          ) : null}
         </div>
 
-        {/* Right: Quick Speed Grading & Action Buttons */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Right: Actions (เพิ่มงาน, จิตพิสัย, โหมดตรวจด่วน, Undo/Redo) */}
+        <div className="flex flex-wrap items-center gap-2">
           
-          {/* Main "โหมดกรอกคะแนนด่วน" Button */}
-          {activeComponents.length > 0 && activeStudents.length > 0 && (
+          {/* Undo / Redo */}
+          <div className="flex bg-muted/60 p-0.5 rounded-2xl border border-border">
             <button
-              onClick={() => {
-                setIsSpeedGradingOpen(true);
-                setSpeedStudentIdx(0);
-              }}
-              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/25 active:scale-95 transition-all cursor-pointer"
+              onClick={undoScore}
+              disabled={undoStack.length === 0}
+              className="p-2 rounded-xl text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-card active:scale-95 transition-all"
+              title="ย้อนกลับ (Undo - Ctrl+Z)"
             >
-              <Zap className="h-4 w-4 animate-pulse" />
-              <span>โหมดตรวจงานด่วน (Speed Mode)</span>
+              <Undo2 className="h-4 w-4" />
             </button>
-          )}
+            <button
+              onClick={redoScore}
+              disabled={redoStack.length === 0}
+              className="p-2 rounded-xl text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-card active:scale-95 transition-all"
+              title="ทำซ้ำ (Redo - Ctrl+Y)"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+          </div>
 
           <button
-            onClick={() => setIsCompOpen(true)}
-            className="flex items-center gap-1.5 rounded-2xl bg-card border border-border px-4 py-3 text-xs font-bold text-foreground hover:bg-muted active:scale-95 transition-all shadow-sm"
+            onClick={() => {
+              setIsSpeedGradingOpen(true);
+              setSpeedStudentIdx(0);
+            }}
+            className="flex items-center gap-1.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 active:scale-95 transition-all shadow-sm"
           >
-            <Plus className="h-4 w-4 text-emerald-600" />
-            เพิ่มชิ้นงาน
+            <Zap className="h-4 w-4" />
+            โหมดตรวจด่วน
           </button>
 
           <button
             onClick={() => setIsBonusOpen(true)}
-            className="flex items-center gap-1.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 px-4 py-3 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 active:scale-95 transition-all shadow-sm"
+            className="flex items-center gap-1.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 px-3.5 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 active:scale-95 transition-all shadow-sm"
           >
             <Award className="h-4 w-4" />
             จิตพิสัย (+/-)
           </button>
+
+          <button
+            onClick={handleOpenAddComp}
+            className="flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 active:scale-95 transition-all shadow-md shadow-emerald-600/20"
+          >
+            <Plus className="h-4 w-4" />
+            เพิ่มงาน
+          </button>
         </div>
       </div>
 
-      {/* Speed Grading Modal Card (ตรวจงานทีละคนอย่างรวดเร็ว) */}
-      {isSpeedGradingOpen && currentSpeedStudent && currentSpeedComp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="glass w-full max-w-2xl rounded-3xl p-6 md:p-8 border border-emerald-500/30 shadow-2xl space-y-6 animate-in zoom-in-95 duration-200 relative">
+      {/* Main Table Card (Designed Exactly like User's Image Reference) */}
+      <div className="bg-card rounded-3xl border border-border overflow-hidden shadow-sm">
+        
+        {/* Table Top Header Bar: Title on Left, Search on Right */}
+        <div className="p-4 px-6 border-b border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-foreground">
+              ตารางบันทึกวิชา {currentSubject?.name || "วิทยาศาสตร์"} (อัตโนมัติ)
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              - ห้อง {currentClass?.name || "ม.1"}
+            </span>
+          </div>
+
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="ค้นหานักเรียนด้วยชื่อ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-2xl border border-border bg-background py-1.5 pl-9 pr-4 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 text-foreground transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Floating Quick Scoring Bar when a cell is selected */}
+        {activeFocusedComp && (
+          <div className="px-6 py-2.5 bg-emerald-500/5 border-b border-emerald-500/20 flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Zap className="h-3.5 w-3.5" />
+                กำลังกรอกช่อง &quot;{activeFocusedComp.name}&quot; (เต็ม {activeFocusedComp.maxScore}):
+              </span>
+              <span className="text-muted-foreground text-[11px]">แตะปุ่มเพื่อลงคะแนนและเลื่อนลงทันที</span>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {getQuickScorePills(activeFocusedComp.maxScore).map((pill) => (
+                <button
+                  key={pill}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleQuickScoreButton(pill);
+                  }}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 border ${
+                    currentFocusedScore === pill
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : "bg-card border-border hover:bg-emerald-500/10 hover:border-emerald-500/30 text-foreground"
+                  }`}
+                >
+                  {pill === activeFocusedComp.maxScore ? `เต็ม (${pill})` : pill}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Scrollable Data Table */}
+        <div className="overflow-x-auto max-h-[640px] relative">
+          <table className="w-full text-left text-xs border-collapse">
             
-            {/* Header: Component selector & Close */}
+            {/* Table Header */}
+            <thead className="bg-muted/60 sticky top-0 z-30 border-b border-border select-none backdrop-blur-md">
+              <tr>
+                {/* Roll No */}
+                <th className="p-3 w-12 text-center bg-muted/95 border-r border-border sticky left-0 z-30 font-bold text-foreground">
+                  เลขที่
+                </th>
+
+                {/* Student Name */}
+                <th className="p-3 w-48 bg-muted/95 border-r border-border sticky left-12 z-30 font-bold text-foreground">
+                  ชื่อนักเรียน
+                </th>
+                
+                {/* Dynamic Component Columns matching User's Image */}
+                {activeComponents.map((comp) => {
+                  const isMenuOpen = openColumnMenuId === comp.id;
+                  const isColFocused = focusedCell?.compId === comp.id;
+
+                  return (
+                    <th 
+                      key={comp.id} 
+                      className={`p-3 text-center border-r border-border min-w-[110px] hover:bg-muted/90 transition-colors relative group ${
+                        isColFocused ? "bg-emerald-500/10" : ""
+                      }`}
+                    >
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="font-bold text-foreground text-xs truncate max-w-[95px]" title={comp.name}>
+                          {comp.name}
+                        </span>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                          เต็ม {comp.maxScore} ({comp.weightPercent}%)
+                        </span>
+                      </div>
+
+                      {/* Hover action toolbar directly on column header (ลบงาน / แก้ไข สะดวก) */}
+                      <div className="absolute right-1 top-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-background/95 dark:bg-card/95 backdrop-blur-sm p-0.5 rounded-lg border border-border shadow-sm">
+                        <button
+                          onClick={() => handleOpenEditComponent(comp)}
+                          className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-emerald-600 transition-colors"
+                          title="แก้ไขชิ้นงาน"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteComponent(comp.id, comp.name)}
+                          className="p-1 hover:bg-rose-500/10 rounded text-muted-foreground hover:text-rose-600 transition-colors"
+                          title="ลบชิ้นงานนี้"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => setOpenColumnMenuId(isMenuOpen ? null : comp.id)}
+                          className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+                          title="เมนูเพิ่มเติม"
+                        >
+                          <MoreVertical className="h-3 w-3" />
+                        </button>
+                      </div>
+
+                      {/* Column Dropdown Menu */}
+                      {isMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 w-48 rounded-2xl bg-card border border-border p-1.5 shadow-2xl z-50 animate-in zoom-in-95 duration-150 text-left">
+                          <button
+                            onClick={() => {
+                              setActiveCompForPaste(comp.id);
+                              setIsPasteOpen(true);
+                              setOpenColumnMenuId(null);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
+                          >
+                            <ClipboardPaste className="h-3.5 w-3.5 text-blue-500" />
+                            วางคะแนนจาก Excel
+                          </button>
+                          <button
+                            onClick={() => handleFillAllScores(comp, comp.maxScore)}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
+                          >
+                            <Check className="h-3.5 w-3.5 text-emerald-500" />
+                            ให้คะแนนเต็มทุกคน ({comp.maxScore})
+                          </button>
+                          <button
+                            onClick={() => handleClearColumnScores(comp)}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 rounded-xl"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            ล้างคะแนนในช่องนี้
+                          </button>
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
+
+                {/* Inline "+ เพิ่มงาน" button at end of column list */}
+                <th className="p-3 w-16 text-center border-r border-border">
+                  <button
+                    onClick={handleOpenAddComp}
+                    className="p-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-all font-bold text-[11px] inline-flex items-center gap-1"
+                    title="เพิ่มชิ้นงานใหม่"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>เพิ่ม</span>
+                  </button>
+                </th>
+
+                {/* Summaries Headers */}
+                <th className="p-3 w-16 text-center bg-amber-500/5 text-amber-600 border-r border-border font-bold">
+                  จิตพิสัย
+                </th>
+                <th className="p-3 w-20 text-center bg-emerald-500/5 text-emerald-600 border-r border-border font-bold">
+                  คะแนนรวม
+                </th>
+                <th className="p-3 w-16 text-center bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 font-bold">
+                  เกรด
+                </th>
+              </tr>
+            </thead>
+            
+            {/* Table Body */}
+            <tbody className="divide-y divide-border">
+              {filteredStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={activeComponents.length + 6} className="p-12 text-center text-muted-foreground">
+                    <p className="font-bold text-sm text-foreground">ไม่พบรายชื่อนักเรียน</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredStudents.map((std, stdIdx) => {
+                  const result = gradeMap[std.id] || { total: 0, grade: "0", bonus: 0, gpa: 0, isLocked: false };
+                  const isCurrentRowFocused = focusedCell?.studentId === std.id;
+                  
+                  return (
+                    <tr 
+                      key={std.id} 
+                      className={`hover:bg-muted/15 transition-colors ${isCurrentRowFocused ? "bg-emerald-500/5" : ""}`}
+                    >
+                      {/* Roll No */}
+                      <td className="p-3 text-center font-semibold bg-card border-r border-border sticky left-0 z-20 text-foreground">
+                        {std.rollNo}
+                      </td>
+
+                      {/* Student Full Name */}
+                      <td className="p-3 font-semibold text-foreground bg-card border-r border-border sticky left-12 z-20 truncate max-w-[190px]">
+                        {std.prefix}{std.firstName} {std.lastName}
+                      </td>
+
+                      {/* Dynamic Score Cells (Auto-select on focus, no need to delete 0) */}
+                      {activeComponents.map((comp, compIdx) => {
+                        const rawVal = scoreMap[`${std.id}_${comp.id}`];
+                        const scoreVal = rawVal !== undefined ? rawVal : 0;
+                        const isCellFocused = focusedCell?.studentId === std.id && focusedCell?.compId === comp.id;
+
+                        return (
+                          <td 
+                            key={comp.id} 
+                            className={`p-1 text-center border-r border-border relative transition-all ${
+                              isCellFocused ? "bg-emerald-500/15 ring-2 ring-emerald-500/40 rounded-xl" : ""
+                            }`}
+                          >
+                            <input
+                              type="number"
+                              id={`score-${std.id}-${comp.id}`}
+                              value={scoreVal}
+                              onChange={(e) => handleScoreChange(std.id, comp, e.target.value)}
+                              onKeyDown={(e) => handleInputKeyDown(e, stdIdx, compIdx)}
+                              onFocus={(e) => {
+                                setFocusedCell({ studentId: std.id, compId: comp.id, stdIdx, compIdx });
+                                e.target.select(); // Auto-selects number so typing replaces 0 immediately!
+                              }}
+                              min={0}
+                              max={comp.maxScore}
+                              step={0.5}
+                              className="w-full text-center font-bold py-1.5 outline-none rounded-xl transition-all text-foreground bg-transparent focus:bg-background focus:ring-2 focus:ring-emerald-500 shadow-none"
+                            />
+                          </td>
+                        );
+                      })}
+
+                      {/* Extra spacer for inline Add column */}
+                      <td className="p-1 border-r border-border bg-muted/5 text-center"></td>
+
+                      {/* Summaries Columns */}
+                      <td className="p-3 text-center font-bold bg-amber-500/5 text-amber-600 dark:text-amber-400 border-r border-border">
+                        {result.bonus > 0 ? `+${result.bonus}` : result.bonus}
+                      </td>
+                      <td className="p-3 text-center font-bold bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border-r border-border">
+                        {result.total}
+                      </td>
+                      <td className="p-3 text-center font-bold">
+                        <span className={`px-2.5 py-0.5 rounded-lg text-xs border font-bold ${getGradePill(result.grade)}`}>
+                          {result.grade}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+
+              {/* Statistics Footer Rows */}
+              {activeComponents.length > 0 && filteredStudents.length > 0 && (
+                <>
+                  <tr className="bg-muted/40 font-bold border-t-2 border-border text-foreground">
+                    <td colSpan={2} className="p-3 text-right sticky left-0 bg-muted/95 border-r border-border text-xs">
+                      คะแนนเฉลี่ย (Mean)
+                    </td>
+                    {activeComponents.map(comp => (
+                      <td key={comp.id} className="p-3 text-center border-r border-border text-emerald-600 dark:text-emerald-400 font-bold">
+                        {columnStats[comp.id]?.mean ?? 0}
+                      </td>
+                    ))}
+                    <td colSpan={4} className="bg-muted/30" />
+                  </tr>
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Speed Grading Modal Dialog (โหมดตรวจงานด่วน) */}
+      {isSpeedGradingOpen && currentSpeedStudent && currentSpeedComp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="bg-card w-full max-w-xl rounded-3xl p-6 md:p-8 border border-emerald-500/30 shadow-2xl space-y-6 animate-in zoom-in-95 duration-200 relative">
+            
             <div className="flex items-center justify-between border-b border-border pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-2xl bg-emerald-600 text-white">
@@ -645,7 +934,7 @@ export default function ScoresPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-black text-foreground">
-                    โหมดตรวจงานด่วน (Speed Grading Mode)
+                    โหมดตรวจงานด่วน
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">เลือกชิ้นงาน:</span>
@@ -667,7 +956,7 @@ export default function ScoresPage() {
               <button
                 onClick={() => setIsSpeedGradingOpen(false)}
                 className="p-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                title="ปิดโหมดตรวจด่วน"
+                title="ปิด"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -683,15 +972,15 @@ export default function ScoresPage() {
                   {Math.round(((speedStudentIdx + 1) / activeStudents.length) * 100)}%
                 </span>
               </div>
-              <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-emerald-600 to-teal-500 transition-all duration-300 rounded-full"
+                  className="h-full bg-emerald-600 transition-all duration-300 rounded-full"
                   style={{ width: `${((speedStudentIdx + 1) / activeStudents.length) * 100}%` }}
                 />
               </div>
             </div>
 
-            {/* Student Hero Card */}
+            {/* Student Card */}
             <div className="p-6 rounded-3xl bg-muted/40 border border-border flex flex-col sm:flex-row items-center justify-between gap-6">
               <div className="flex items-center gap-4 text-center sm:text-left">
                 <div className="h-16 w-16 rounded-3xl bg-emerald-600/15 border-2 border-emerald-500/30 flex flex-col items-center justify-center font-black text-emerald-700 dark:text-emerald-300 shrink-0">
@@ -705,46 +994,39 @@ export default function ScoresPage() {
                   <h4 className="text-xl font-black text-foreground">
                     {currentSpeedStudent.firstName} {currentSpeedStudent.lastName}
                   </h4>
-                  <span className="text-xs text-muted-foreground">
-                    ห้อง {currentClass?.name} | {currentSubject?.name}
-                  </span>
                 </div>
               </div>
 
-              {/* Direct score input box */}
+              {/* Direct score input */}
               <div className="flex flex-col items-center gap-1.5">
                 <span className="text-xs font-bold text-muted-foreground">
                   คะแนน (เต็ม {currentSpeedComp.maxScore})
                 </span>
-                <div className="relative flex items-center">
-                  <input
-                    ref={speedInputRef}
-                    type="number"
-                    value={currentSpeedScore ?? ""}
-                    onChange={(e) => handleScoreChange(currentSpeedStudent.id, currentSpeedComp, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        if (speedStudentIdx < activeStudents.length - 1) {
-                          setSpeedStudentIdx(prev => prev + 1);
-                        }
+                <input
+                  ref={speedInputRef}
+                  type="number"
+                  value={currentSpeedScore ?? 0}
+                  onChange={(e) => handleScoreChange(currentSpeedStudent.id, currentSpeedComp, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (speedStudentIdx < activeStudents.length - 1) {
+                        setSpeedStudentIdx(prev => prev + 1);
                       }
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    min={0}
-                    max={currentSpeedComp.maxScore}
-                    step={0.5}
-                    placeholder="0"
-                    className="w-28 h-14 rounded-2xl border-2 border-emerald-500/40 bg-background text-center text-2xl font-black text-emerald-600 dark:text-emerald-400 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 shadow-inner"
-                  />
-                </div>
+                    }
+                  }}
+                  onFocus={(e) => e.target.select()}
+                  min={0}
+                  max={currentSpeedComp.maxScore}
+                  step={0.5}
+                  className="w-24 h-12 rounded-2xl border-2 border-emerald-500/40 bg-background text-center text-2xl font-black text-emerald-600 dark:text-emerald-400 outline-none focus:border-emerald-500"
+                />
               </div>
             </div>
 
             {/* Quick Tap Score Presets */}
             <div className="space-y-2">
-              <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="text-xs font-bold text-muted-foreground">
                 แตะคะแนนด่วน (บันทึกและเลื่อนไปคนถัดไปทันที):
               </span>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -752,19 +1034,19 @@ export default function ScoresPage() {
                   <button
                     key={pill}
                     onClick={() => handleApplySpeedScore(pill)}
-                    className={`py-3 px-2 rounded-2xl font-black text-sm transition-all active:scale-95 shadow-sm border ${
+                    className={`py-2.5 px-2 rounded-2xl font-bold text-xs transition-all active:scale-95 shadow-sm border ${
                       currentSpeedScore === pill
                         ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20"
-                        : "bg-card border-border hover:bg-muted text-foreground hover:border-emerald-500/40"
+                        : "bg-card border-border hover:bg-muted text-foreground"
                     }`}
                   >
-                    {pill === currentSpeedComp.maxScore ? `💯 เต็ม (${pill})` : `${pill} คะแนน`}
+                    {pill === currentSpeedComp.maxScore ? `เต็ม (${pill})` : `${pill} คะแนน`}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Footer Navigation Buttons */}
+            {/* Footer Navigation */}
             <div className="flex items-center justify-between border-t border-border pt-4">
               <button
                 onClick={() => setSpeedStudentIdx(prev => Math.max(0, prev - 1))}
@@ -773,13 +1055,6 @@ export default function ScoresPage() {
               >
                 <ChevronLeft className="h-4 w-4" />
                 คนก่อนหน้า
-              </button>
-
-              <button
-                onClick={() => setIsSpeedGradingOpen(false)}
-                className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
-              >
-                เสร็จสิ้นการตรวจ
               </button>
 
               <button
@@ -796,465 +1071,59 @@ export default function ScoresPage() {
         </div>
       )}
 
-      {/* Main Table Quick Actions & Live Filter Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        
-        {/* Search & Filter pills */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative min-w-[240px]">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="ค้นหาชื่อ หรือเลขที่นักเรียน..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-2xl border border-border bg-card pl-9 pr-4 py-2.5 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all text-foreground font-medium shadow-sm"
-            />
-          </div>
-
-          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-2xl border border-border text-xs">
-            {[
-              { id: "ALL", label: "ทั้งหมด" },
-              { id: "PASSED", label: "ผ่านเกณฑ์" },
-              { id: "UNGRADED", label: "ยังไม่ตรวจ" },
-              { id: "GRADE_4", label: "เกรด 4" },
-              { id: "GRADE_0", label: "ติด 0" }
-            ].map(f => (
-              <button
-                key={f.id}
-                onClick={() => setGradeFilter(f.id)}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
-                  gradeFilter === f.id
-                    ? "bg-emerald-600 text-white shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Undo / Redo & Export toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex bg-muted/50 p-1 rounded-2xl border border-border">
-            <button
-              onClick={undoScore}
-              disabled={undoStack.length === 0}
-              className="p-2 rounded-xl text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-card active:scale-95 transition-all"
-              title="ย้อนกลับ (Undo - Ctrl+Z)"
-            >
-              <Undo2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={redoScore}
-              disabled={redoStack.length === 0}
-              className="p-2 rounded-xl text-muted-foreground hover:text-foreground disabled:opacity-30 hover:bg-card active:scale-95 transition-all"
-              title="ทำซ้ำ (Redo - Ctrl+Y)"
-            >
-              <Redo2 className="h-4 w-4" />
-            </button>
-          </div>
-
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 rounded-2xl bg-card border border-border px-4 py-2.5 text-xs font-bold text-foreground hover:bg-muted active:scale-95 transition-all shadow-sm"
-            title="ดาวน์โหลดไฟล์ Excel (.csv)"
-          >
-            <Download className="h-4 w-4 text-emerald-600" />
-            ส่งออก Excel
-          </button>
-        </div>
-      </div>
-
-      {/* Main Score Grid Table Container */}
-      <div className="glass rounded-3xl border border-border overflow-hidden shadow-sm">
-        
-        {/* Table Helper Notification */}
-        <div className="p-3 px-5 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>กด <strong>Enter</strong> หรือ <strong>↓</strong> เพื่อเลื่อนลงไปนักเรียนคนถัดไปอัตโนมัติ</span>
-          </div>
-          <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-[11px]">
-            ⚡ ระบบ Auto-Save บันทึกลง Cloud อัตโนมัติในทุกช่อง
-          </span>
-        </div>
-
-        {/* Scrollable Data Table with Frozen Headers & Columns */}
-        <div className="overflow-x-auto max-h-[600px] relative">
-          <table className="w-full text-left text-xs border-collapse">
-            
-            {/* Table Header */}
-            <thead className="bg-muted/80 sticky top-0 z-30 border-b border-border select-none backdrop-blur-md">
-              <tr>
-                <th className="p-4 w-14 text-center bg-muted/95 border-r border-border sticky left-0 z-30 font-black text-foreground">
-                  เลขที่
-                </th>
-                <th className="p-4 w-52 bg-muted/95 border-r border-border sticky left-14 z-30 font-black text-foreground">
-                  ชื่อ - นามสกุล
-                </th>
-                
-                {/* Dynamic Component Columns */}
-                {activeComponents.length === 0 ? (
-                  <th className="p-6 text-center text-muted-foreground italic font-medium">
-                    ยังไม่มีชิ้นงานเก็บคะแนน (กดปุ่ม &quot;+ เพิ่มชิ้นงาน&quot; ด้านบนเพื่อเริ่มต้น)
-                  </th>
-                ) : (
-                  activeComponents.map((comp) => {
-                    const typeBadge = getComponentTypeBadge(comp.type);
-                    const isMenuOpen = openColumnMenuId === comp.id;
-                    const stats = columnStats[comp.id];
-
-                    return (
-                      <th 
-                        key={comp.id} 
-                        className={`p-3.5 text-center border-r border-border min-w-[140px] hover:bg-muted/90 transition-colors relative group ${
-                          focusedCell?.compId === comp.id ? "bg-emerald-500/10" : ""
-                        }`}
-                      >
-                        <div className="flex flex-col items-center">
-                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase border mb-1.5 ${typeBadge.bg}`}>
-                            {typeBadge.label}
-                          </span>
-                          <div className="font-bold text-foreground text-xs truncate max-w-[120px]" title={comp.name}>
-                            {comp.name}
-                          </div>
-                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">
-                            เต็ม {comp.maxScore} ({comp.weightPercent}%)
-                          </div>
-                          {stats && (
-                            <span className="text-[9px] text-muted-foreground font-semibold mt-0.5">
-                              ตรวจแล้ว {stats.gradedCount}/{activeStudents.length}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Column Quick Action Dropdown Trigger */}
-                        <div className="absolute right-1 top-2">
-                          <button
-                            onClick={() => setOpenColumnMenuId(isMenuOpen ? null : comp.id)}
-                            className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground opacity-60 group-hover:opacity-100 transition-opacity"
-                            title="ตัวเลือกคอลัมน์"
-                          >
-                            <MoreVertical className="h-3.5 w-3.5" />
-                          </button>
-
-                          {/* Column Action Dropdown Menu */}
-                          {isMenuOpen && (
-                            <div className="absolute right-0 top-full mt-1 w-52 rounded-2xl bg-card border border-border p-1.5 shadow-2xl z-50 animate-in zoom-in-95 duration-150 text-left">
-                              <button
-                                onClick={() => {
-                                  setSpeedCompId(comp.id);
-                                  setSpeedStudentIdx(0);
-                                  setIsSpeedGradingOpen(true);
-                                  setOpenColumnMenuId(null);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-500/10 rounded-xl"
-                              >
-                                <Zap className="h-3.5 w-3.5" />
-                                เปิดโหมดตรวจด่วนคอลัมน์นี้
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveCompForPaste(comp.id);
-                                  setIsPasteOpen(true);
-                                  setOpenColumnMenuId(null);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
-                              >
-                                <ClipboardPaste className="h-3.5 w-3.5 text-blue-500" />
-                                วางคะแนนจาก Excel
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveCompForFill(comp);
-                                  setDefaultFillValue(comp.maxScore);
-                                  setIsFillDefaultOpen(true);
-                                  setOpenColumnMenuId(null);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
-                              >
-                                <CheckCircle2 className="h-3.5 w-3.5 text-amber-500" />
-                                กำหนดคะแนนเท่ากันทุกคน
-                              </button>
-                              <button
-                                onClick={() => handleFillAllScores(comp, comp.maxScore)}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
-                              >
-                                <Check className="h-3.5 w-3.5 text-emerald-500" />
-                                ให้คะแนนเต็มทุกคน ({comp.maxScore})
-                              </button>
-                              <button
-                                onClick={() => handleClearColumnScores(comp)}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 rounded-xl"
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                                ล้างคะแนนในช่องนี้
-                              </button>
-                              <div className="h-px bg-border my-1" />
-                              <button
-                                onClick={() => handleOpenEditComponent(comp)}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted rounded-xl"
-                              >
-                                <Settings className="h-3.5 w-3.5 text-slate-500" />
-                                แก้ไขชื่อ / คะแนนเต็ม
-                              </button>
-                              <button
-                                onClick={() => handleDeleteComponent(comp.id, comp.name)}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 rounded-xl"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                ลบคอลัมน์นี้
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </th>
-                    );
-                  })
-                )}
-
-                {/* Summaries Headers */}
-                <th className="p-3 w-16 text-center bg-amber-500/5 text-amber-600 border-r border-border font-bold">
-                  จิตพิสัย
-                </th>
-                <th className="p-3 w-20 text-center bg-emerald-500/5 text-emerald-600 border-r border-border font-bold">
-                  คะแนนรวม
-                </th>
-                <th className="p-3 w-16 text-center bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 font-black">
-                  เกรด
-                </th>
-              </tr>
-            </thead>
-            
-            {/* Table Body */}
-            <tbody className="divide-y divide-border">
-              {filteredStudents.length === 0 ? (
-                <tr>
-                  <td colSpan={activeComponents.length + 5} className="p-12 text-center text-muted-foreground">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <Users className="h-8 w-8 text-muted-foreground/50" />
-                      <p className="font-bold text-sm text-foreground">ไม่พบรายชื่อนักเรียนตามเงื่อนไข</p>
-                      <p className="text-xs">กรุณาตรวจสอบการค้นหา หรือเลือกห้องเรียนที่มีนักเรียน</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredStudents.map((std, stdIdx) => {
-                  const result = gradeMap[std.id] || { total: 0, grade: "0", bonus: 0, gpa: 0, isLocked: false };
-                  const isCurrentRowFocused = focusedCell?.studentId === std.id;
-                  
-                  return (
-                    <tr 
-                      key={std.id} 
-                      className={`hover:bg-muted/20 transition-colors ${isCurrentRowFocused ? "bg-emerald-500/10 font-semibold" : ""}`}
-                    >
-                      {/* Frozen Left Columns */}
-                      <td className="p-3.5 text-center font-bold bg-card border-r border-border sticky left-0 z-20 text-foreground">
-                        {std.rollNo}
-                      </td>
-                      <td className="p-3.5 font-semibold text-foreground bg-card border-r border-border sticky left-14 z-20 truncate max-w-[210px]">
-                        <span className="text-muted-foreground text-[11px] mr-1">{std.prefix}</span>
-                        {std.firstName} {std.lastName}
-                      </td>
-
-                      {/* Dynamic Score Cells with Instant Focus & Select */}
-                      {activeComponents.map((comp, compIdx) => {
-                        const rawVal = scoreMap[`${std.id}_${comp.id}`];
-                        const scoreVal = rawVal !== undefined ? rawVal : "";
-                        const cellId = `${std.id}_${comp.id}`;
-                        const isSaving = savingCell === cellId;
-                        const isCellFocused = focusedCell?.studentId === std.id && focusedCell?.compId === comp.id;
-
-                        // Score Level Visuals
-                        const isHighScore = rawVal !== undefined && rawVal >= comp.maxScore * 0.8;
-                        const isLowScore = rawVal !== undefined && rawVal < comp.maxScore * 0.5;
-
-                        return (
-                          <td 
-                            key={comp.id} 
-                            className={`p-1.5 text-center border-r border-border relative transition-all ${
-                              isSaving ? "bg-emerald-500/25" : isCellFocused ? "bg-emerald-500/15 ring-2 ring-emerald-500/40 rounded-xl" : ""
-                            }`}
-                          >
-                            <input
-                              type="number"
-                              id={`score-${std.id}-${comp.id}`}
-                              value={scoreVal}
-                              onChange={(e) => handleScoreChange(std.id, comp, e.target.value)}
-                              onKeyDown={(e) => handleInputKeyDown(e, stdIdx, compIdx)}
-                              onFocus={(e) => {
-                                setFocusedCell({ studentId: std.id, compId: comp.id });
-                                e.target.select();
-                              }}
-                              onBlur={() => setFocusedCell(null)}
-                              min={0}
-                              max={comp.maxScore}
-                              step={0.5}
-                              className={`w-full text-center font-black py-2.5 text-sm outline-none rounded-xl transition-all ${
-                                isHighScore
-                                  ? "text-emerald-700 dark:text-emerald-300 font-black"
-                                  : isLowScore
-                                  ? "text-rose-600 dark:text-rose-400 font-black"
-                                  : "text-foreground font-bold"
-                              } focus:bg-background focus:ring-2 focus:ring-emerald-500 shadow-sm`}
-                            />
-                            
-                            {/* Saving Status Pulse Indicator */}
-                            {isSaving && (
-                              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                            )}
-                          </td>
-                        );
-                      })}
-
-                      {/* Summaries Columns */}
-                      <td className="p-3 text-center font-bold bg-amber-500/5 text-amber-600 dark:text-amber-400 border-r border-border">
-                        {result.bonus > 0 ? `+${result.bonus}` : result.bonus}
-                      </td>
-                      <td className="p-3 text-center font-black text-sm bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border-r border-border">
-                        {result.total}
-                      </td>
-                      <td className="p-3 text-center font-black">
-                        <span className={`px-3 py-1 rounded-xl text-xs border font-black ${getGradePill(result.grade)}`}>
-                          {result.grade}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-
-              {/* Statistics Summary Rows */}
-              {activeComponents.length > 0 && filteredStudents.length > 0 && (
-                <>
-                  {/* Mean Score */}
-                  <tr className="bg-muted/40 font-bold border-t-2 border-border text-foreground">
-                    <td colSpan={2} className="p-3.5 text-right sticky left-0 bg-muted/95 border-r border-border text-xs">
-                      คะแนนเฉลี่ย (Mean)
-                    </td>
-                    {activeComponents.map(comp => (
-                      <td key={comp.id} className="p-3 text-center border-r border-border text-emerald-600 dark:text-emerald-400 font-black">
-                        {columnStats[comp.id]?.mean ?? 0}
-                      </td>
-                    ))}
-                    <td colSpan={3} className="bg-muted/30" />
-                  </tr>
-                  
-                  {/* Max Score */}
-                  <tr className="bg-muted/20 font-semibold text-foreground">
-                    <td colSpan={2} className="p-3.5 text-right sticky left-0 bg-muted/90 border-r border-border text-xs">
-                      คะแนนสูงสุด (Max)
-                    </td>
-                    {activeComponents.map(comp => (
-                      <td key={comp.id} className="p-3 text-center border-r border-border text-blue-600 dark:text-blue-400 font-bold">
-                        {columnStats[comp.id]?.max ?? 0}
-                      </td>
-                    ))}
-                    <td colSpan={3} className="bg-muted/15" />
-                  </tr>
-                  
-                  {/* Min Score */}
-                  <tr className="bg-muted/20 font-semibold text-foreground">
-                    <td colSpan={2} className="p-3.5 text-right sticky left-0 bg-muted/90 border-r border-border text-xs">
-                      คะแนนต่ำสุด (Min)
-                    </td>
-                    {activeComponents.map(comp => (
-                      <td key={comp.id} className="p-3 text-center border-r border-border text-rose-500 font-bold">
-                        {columnStats[comp.id]?.min ?? 0}
-                      </td>
-                    ))}
-                    <td colSpan={3} className="bg-muted/15" />
-                  </tr>
-                  
-                  {/* Pass Rate */}
-                  <tr className="bg-emerald-500/5 font-black text-emerald-700 dark:text-emerald-400">
-                    <td colSpan={2} className="p-3.5 text-right sticky left-0 bg-muted/90 border-r border-border text-xs">
-                      เปอร์เซ็นต์ผ่าน (&ge; 50%)
-                    </td>
-                    {activeComponents.map(comp => (
-                      <td key={comp.id} className="p-3 text-center border-r border-border font-black">
-                        {columnStats[comp.id]?.passRate ?? 100}%
-                      </td>
-                    ))}
-                    <td colSpan={3} className="bg-emerald-500/5" />
-                  </tr>
-                </>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Grade Distribution Bar */}
-      <div className="glass rounded-3xl p-5 border border-border">
-        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-          <TrendingUp className="h-4 w-4 text-emerald-600" />
-          การกระจายตัวของเกรดทั้งห้องเรียน (Live Grade Distribution)
-        </h4>
-
-        <div className="grid grid-cols-4 sm:grid-cols-8 gap-2.5">
-          {["4", "3.5", "3", "2.5", "2", "1.5", "1", "0"].map((g) => {
-            const count = classAnalytics.gradeCounts[g] || 0;
-            const percent = activeStudents.length > 0 ? Math.round((count / activeStudents.length) * 100) : 0;
-
-            return (
-              <div 
-                key={g} 
-                className="p-3 rounded-2xl bg-muted/40 border border-border flex flex-col items-center justify-center text-center transition-all hover:bg-muted/70"
-              >
-                <span className={`px-2 py-0.5 rounded-lg text-xs font-black mb-1 ${getGradePill(g)}`}>
-                  เกรด {g}
-                </span>
-                <span className="text-base font-black text-foreground">{count} คน</span>
-                <span className="text-[10px] text-muted-foreground font-semibold">{percent}%</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Add Component Dialog Modal */}
+      {/* Add Component Dialog Modal (เพิ่มงานสะดวกพร้อม Presets) */}
       {isCompOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass w-full max-w-md rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
-            <h3 className="text-lg font-black mb-4 flex items-center gap-2 text-foreground">
+          <div className="bg-card w-full max-w-md rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl space-y-4">
+            <h3 className="text-lg font-black flex items-center gap-2 text-foreground">
               <Sliders className="h-5 w-5 text-emerald-600" />
               เพิ่มชิ้นงานเก็บคะแนนใหม่
             </h3>
 
-            <form onSubmit={handleAddComponentSubmit} className="space-y-4">
+            {/* Quick Presets chips */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold text-muted-foreground">เลือกจากชื่อชิ้นงานสำเร็จรูป:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { name: `งาน ${activeComponents.length + 1}`, max: 10, weight: 10, type: "assignment" },
+                  { name: "สอบกลางภาค", max: 20, weight: 20, type: "exam" },
+                  { name: "สอบปลายภาค", max: 20, weight: 20, type: "exam" },
+                  { name: "ทดสอบย่อย", max: 10, weight: 10, type: "quiz" },
+                  { name: "โครงงาน", max: 20, weight: 20, type: "project" }
+                ].map(p => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    onClick={() => {
+                      setCompName(p.name);
+                      setCompMaxScore(p.max);
+                      setCompWeight(p.weight);
+                      setCompType(p.type as any);
+                    }}
+                    className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-muted hover:bg-emerald-500/10 hover:text-emerald-600 border border-border transition-all"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddComponentSubmit} className="space-y-4 pt-2">
               <div>
                 <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อชิ้นงาน / ใบงาน</label>
                 <input
                   type="text"
-                  placeholder="เช่น ใบงานที่ 3: ระบบนิเวศ"
+                  placeholder="เช่น งาน 1 หรือ สอบกลางภาค"
                   value={compName}
                   onChange={(e) => setCompName(e.target.value)}
                   required
-                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-4 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 text-foreground font-medium"
+                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-4 text-sm outline-none focus:border-emerald-500 text-foreground font-semibold"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-muted-foreground mb-1">ประเภทคะแนน</label>
-                <select
-                  value={compType}
-                  onChange={(e: any) => setCompType(e.target.value)}
-                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-3 text-sm outline-none focus:border-emerald-500 text-foreground cursor-pointer font-medium"
-                >
-                  <option value="assignment">📝 การบ้าน / ใบงาน (Assignment)</option>
-                  <option value="quiz">⚡ ทดสอบย่อย (Quiz)</option>
-                  <option value="exam">🎯 สอบกลาง/ปลายภาค (Exam)</option>
-                  <option value="project">💡 โครงงาน/ชิ้นงานใหญ่ (Project)</option>
-                  <option value="other">📦 คะแนนอื่นๆ (Other)</option>
-                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-muted-foreground mb-1">คะแนนเต็ม (Max Score)</label>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1">คะแนนเต็ม</label>
                   <input
                     type="number"
                     value={compMaxScore}
@@ -1291,7 +1160,7 @@ export default function ScoresPage() {
                   type="submit"
                   className="rounded-2xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/20"
                 >
-                  บันทึกชิ้นงาน
+                  เพิ่มชิ้นงาน
                 </button>
               </div>
             </form>
@@ -1302,10 +1171,10 @@ export default function ScoresPage() {
       {/* Edit Component Dialog Modal */}
       {isEditCompOpen && editingComp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass w-full max-w-md rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
+          <div className="bg-card w-full max-w-md rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
             <h3 className="text-lg font-black mb-4 text-foreground flex items-center gap-2">
               <Sliders className="h-5 w-5 text-emerald-600" />
-              แก้ไขข้อมูลชิ้นงานคะแนน
+              แก้ไขชิ้นงาน &quot;{editingComp.name}&quot;
             </h3>
 
             <form onSubmit={handleEditComponentSubmit} className="space-y-4">
@@ -1316,23 +1185,8 @@ export default function ScoresPage() {
                   value={compName}
                   onChange={(e) => setCompName(e.target.value)}
                   required
-                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-4 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 text-foreground font-medium"
+                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-4 text-sm outline-none focus:border-emerald-500 text-foreground font-semibold"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-muted-foreground mb-1">ประเภทคะแนน</label>
-                <select
-                  value={compType}
-                  onChange={(e: any) => setCompType(e.target.value)}
-                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-3 text-sm outline-none focus:border-emerald-500 text-foreground cursor-pointer font-medium"
-                >
-                  <option value="assignment">📝 การบ้าน / ใบงาน</option>
-                  <option value="quiz">⚡ ทดสอบย่อย</option>
-                  <option value="exam">🎯 สอบกลาง/ปลายภาค</option>
-                  <option value="project">💡 โครงงาน/ชิ้นงานใหญ่</option>
-                  <option value="other">📦 คะแนนอื่นๆ</option>
-                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1385,12 +1239,12 @@ export default function ScoresPage() {
       {/* Bulk Paste Dialog Modal */}
       {isPasteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass w-full max-w-lg rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
+          <div className="bg-card w-full max-w-lg rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
             <h3 className="text-lg font-black mb-2 flex items-center gap-2 text-foreground">
               <ClipboardPaste className="h-5 w-5 text-emerald-600" />
               วางคะแนนจาก Excel ในคอลัมน์นี้
             </h3>
-            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+            <p className="text-xs text-muted-foreground mb-4">
               คัดลอกเฉพาะคะแนน 1 คอลัมน์จาก Excel แล้วนำมาวางในกล่องด้านล่างนี้ ระบบจะเรียงใส่คะแนนให้นักเรียนตามเลขที่ 1, 2, 3... อัตโนมัติ
             </p>
 
@@ -1398,7 +1252,7 @@ export default function ScoresPage() {
               placeholder="วางคะแนนที่คัดลอกมา เช่น:&#10;10&#10;8.5&#10;9&#10;7.5"
               value={pastedScoresText}
               onChange={(e) => setPastedScoresText(e.target.value)}
-              className="w-full h-44 rounded-2xl border border-border bg-background py-3 px-4 text-xs font-mono outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 text-foreground"
+              className="w-full h-44 rounded-2xl border border-border bg-background py-3 px-4 text-xs font-mono outline-none focus:border-emerald-500 text-foreground"
             />
 
             <div className="flex items-center justify-end gap-2 mt-4">
@@ -1412,53 +1266,8 @@ export default function ScoresPage() {
                 onClick={handleExecutePasteScores}
                 className="rounded-2xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/20"
               >
-                บันทึกคะแนนด่วน
+                บันทึกคะแนน
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Fill Default Score Dialog Modal */}
-      {isFillDefaultOpen && activeCompForFill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass w-full max-w-sm rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
-            <h3 className="text-lg font-black mb-2 flex items-center gap-2 text-foreground">
-              <Zap className="h-5 w-5 text-amber-500" />
-              กำหนดคะแนนเท่ากันทุกคน
-            </h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              ระบุคะแนนที่ต้องการใส่ให้กับนักเรียนทุกคนในคอลัมน์ <strong>&quot;{activeCompForFill.name}&quot;</strong> (คะแนนเต็ม {activeCompForFill.maxScore})
-            </p>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-muted-foreground mb-1">คะแนนเริ่มต้น</label>
-                <input
-                  type="number"
-                  value={defaultFillValue}
-                  onChange={(e) => setDefaultFillValue(parseFloat(e.target.value))}
-                  min={0}
-                  max={activeCompForFill.maxScore}
-                  step={0.5}
-                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-4 text-sm font-black text-center text-foreground outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  onClick={() => setIsFillDefaultOpen(false)}
-                  className="rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted text-foreground"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  onClick={() => handleFillAllScores(activeCompForFill, defaultFillValue)}
-                  className="rounded-2xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/20"
-                >
-                  ปรับใช้ทุกคน
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -1467,7 +1276,7 @@ export default function ScoresPage() {
       {/* Bonus Score Dialog Modal */}
       {isBonusOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="glass w-full max-w-md rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
+          <div className="bg-card w-full max-w-md rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
             <h3 className="text-lg font-black mb-4 flex items-center gap-2 text-foreground">
               <Award className="h-5 w-5 text-amber-500" />
               บันทึกคะแนนจิตพิสัย / ความประพฤติพิเศษ
@@ -1493,7 +1302,7 @@ export default function ScoresPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-muted-foreground mb-1">คะแนน (Points)</label>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1">คะแนน</label>
                   <select
                     value={bonusPoints}
                     onChange={(e) => setBonusPoints(parseInt(e.target.value))}
@@ -1508,7 +1317,7 @@ export default function ScoresPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-muted-foreground mb-1">กิจกรรม / พฤติกรรม</label>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1">เหตุผล</label>
                   <input
                     type="text"
                     placeholder="เช่น ช่วยจัดบอร์ดกิจกรรม"
@@ -1537,6 +1346,14 @@ export default function ScoresPage() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Floating Save Toast Notification */}
+      {saveSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-5 duration-200">
+          <CheckCircle2 className="h-5 w-5" />
+          <span className="text-xs font-bold">บันทึกข้อมูลลง Supabase เรียบร้อยแล้ว!</span>
         </div>
       )}
 

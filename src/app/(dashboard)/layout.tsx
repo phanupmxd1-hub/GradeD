@@ -87,10 +87,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const [isAddClassOpen, setIsAddClassOpen] = useState(false);
-  const [newClassName, setNewClassName] = useState("");
   const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
   const [newSubClassroomId, setNewSubClassroomId] = useState("");
+  const [newSubNewClassName, setNewSubNewClassName] = useState("");
   const [newSubCode, setNewSubCode] = useState("");
   const [newSubName, setNewSubName] = useState("");
   const [newSubCredit, setNewSubCredit] = useState(1.5);
@@ -107,7 +106,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   // Auto-synchronize classroom and subject when selecting
   const handleSubjectChange = (subjectId: string) => {
     if (subjectId === "ADD_NEW") {
-      setNewSubClassroomId(activeClassroomId || classrooms[0]?.id || "");
+      setNewSubClassroomId(activeClassroomId || (classrooms[0] ? classrooms[0].id : "NEW"));
+      setNewSubNewClassName("");
       setNewSubCode("");
       setNewSubName("");
       setNewSubCredit(1.5);
@@ -119,22 +119,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       const matchedClassId = getSubjectClassroomId(subjectId);
       if (matchedClassId && classrooms.some(c => c.id === matchedClassId)) {
         setActiveClassroomId(matchedClassId);
-      }
-    }
-  };
-
-  const handleClassroomChange = (classroomId: string) => {
-    if (classroomId === "ADD_NEW") {
-      setIsAddClassOpen(true);
-    } else {
-      setActiveClassroomId(classroomId);
-      // If current subject is for another classroom, automatically switch to a subject of this classroom
-      const currentSubClassId = getSubjectClassroomId(activeSubjectId);
-      if (currentSubClassId && currentSubClassId !== classroomId) {
-        const matchingSub = subjects.find(s => getSubjectClassroomId(s.id) === classroomId);
-        if (matchingSub) {
-          setActiveSubjectId(matchingSub.id);
-        }
       }
     }
   };
@@ -360,39 +344,31 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               </div>
               <div className="h-4 w-px bg-border" />
 
-              {/* Classroom Dropdown */}
-              <div className="relative group">
-                <select
-                  value={activeClassroomId}
-                  onChange={(e) => handleClassroomChange(e.target.value)}
-                  className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-semibold text-foreground outline-none cursor-pointer"
-                >
-                  {classrooms.filter(c => c.academicYearId === activeAcademicYearId).map(c => (
-                    <option key={c.id} value={c.id} className="dark:bg-card">ห้อง {c.name}</option>
-                  ))}
-                  <option value="ADD_NEW" className="text-emerald-600 font-bold dark:bg-card">+ เพิ่มห้องเรียนใหม่...</option>
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              </div>
-              <div className="h-4 w-px bg-border" />
-
-              {/* Subject Dropdown */}
+              {/* Subject Dropdown (Includes Classroom) */}
               <div className="relative group">
                 <select
                   value={activeSubjectId}
                   onChange={(e) => handleSubjectChange(e.target.value)}
-                  className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-semibold text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer"
+                  className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer"
                 >
-                  {subjects.map(s => {
-                    const matchedClassId = getSubjectClassroomId(s.id);
-                    const matchedClass = classrooms.find(c => c.id === matchedClassId);
-                    return (
-                      <option key={s.id} value={s.id} className="dark:bg-card">
-                        {s.code} - {s.name}{matchedClass ? ` (ห้อง ${matchedClass.name})` : ""}
-                      </option>
-                    );
-                  })}
-                  <option value="ADD_NEW" className="text-emerald-600 font-bold dark:bg-card">+ เพิ่มวิชาเรียนใหม่...</option>
+                  {subjects.length > 0 ? (
+                    subjects.map(s => {
+                      const matchedClassId = getSubjectClassroomId(s.id);
+                      const matchedClass = classrooms.find(c => c.id === matchedClassId);
+                      return (
+                        <option key={s.id} value={s.id} className="dark:bg-card text-foreground font-semibold">
+                          {s.code} - {s.name}{matchedClass ? ` (ห้อง ${matchedClass.name})` : ""}
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <option value="" disabled className="dark:bg-card text-muted-foreground">
+                      -- ยังไม่มีวิชาเรียน --
+                    </option>
+                  )}
+                  <option value="ADD_NEW" className="text-emerald-600 font-bold dark:bg-card">
+                    + เพิ่มวิชาเรียนใหม่...
+                  </option>
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-emerald-600 pointer-events-none" />
               </div>
@@ -402,7 +378,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             {/* Selection indicators on mobile */}
             <div className="lg:hidden flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-full">
               <BookOpen className="h-3.5 w-3.5" />
-              <span>ห้อง {currentClass?.name} | {currentSubject?.code}</span>
+              <span>{currentSubject ? `${currentSubject.code} ${currentSubject.name}${currentClass ? ` (ห้อง ${currentClass.name})` : ""}` : "ยังไม่ได้เลือกวิชา"}</span>
             </div>
           </div>
 
@@ -493,19 +469,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             ))}
           </select>
           <select
-            value={activeClassroomId}
-            onChange={(e) => handleClassroomChange(e.target.value)}
-            className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-medium text-foreground cursor-pointer"
-          >
-            {classrooms.filter(c => c.academicYearId === activeAcademicYearId).map(c => (
-              <option key={c.id} value={c.id}>ห้อง {c.name}</option>
-            ))}
-            <option value="ADD_NEW">+ เพิ่มห้องเรียน...</option>
-          </select>
-          <select
             value={activeSubjectId}
             onChange={(e) => handleSubjectChange(e.target.value)}
-            className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-medium text-foreground cursor-pointer"
+            className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 cursor-pointer"
           >
             {subjects.map(s => {
               const matchedClassId = getSubjectClassroomId(s.id);
@@ -557,54 +523,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </nav>
       </div>
 
-      {/* Add Classroom Dialog Modal */}
-      {isAddClassOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4">
-          <div className="glass w-full max-w-sm rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-bold mb-2 text-foreground">เพิ่มห้องเรียนใหม่</h3>
-            <p className="text-xs text-muted-foreground mb-4">ระบุชื่อห้องเรียนเรียนที่ต้องการสร้างในระบบสำหรับปีการศึกษานี้</p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อห้องเรียน (Classroom Name)</label>
-                <input
-                  type="text"
-                  placeholder="เช่น ม.1/3 หรือ ม.2/2"
-                  value={newClassName}
-                  onChange={(e) => setNewClassName(e.target.value)}
-                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-4 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 text-foreground"
-                  autoFocus
-                />
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  onClick={() => {
-                    setIsAddClassOpen(false);
-                    setNewClassName("");
-                  }}
-                  className="rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted text-foreground"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  onClick={() => {
-                    if (newClassName.trim()) {
-                      addClassroom(newClassName.trim());
-                      setNewClassName("");
-                      setIsAddClassOpen(false);
-                    }
-                  }}
-                  disabled={!newClassName.trim()}
-                  className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-                >
-                  สร้างห้องเรียน
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Subject Dialog Modal with Classroom Selector */}
+      {/* Add Subject Dialog Modal with Integrated Classroom Definition */}
       {isAddSubjectOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4">
           <div className="glass w-full max-w-md rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
@@ -617,7 +536,18 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!newSubCode.trim() || !newSubName.trim()) return;
-                const chosenClassId = newSubClassroomId || activeClassroomId || classrooms[0]?.id;
+
+                let chosenClassId = newSubClassroomId;
+                if (chosenClassId === "NEW" || (!chosenClassId && classrooms.length === 0)) {
+                  if (!newSubNewClassName.trim()) {
+                    alert("กรุณาระบุชื่อห้องเรียน เช่น ม.1 หรือ ม.1/1");
+                    return;
+                  }
+                  chosenClassId = addClassroom(newSubNewClassName.trim());
+                } else if (!chosenClassId) {
+                  chosenClassId = activeClassroomId || classrooms[0]?.id;
+                }
+
                 addSubject(
                   newSubCode.trim(),
                   newSubName.trim(),
@@ -628,27 +558,61 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                 setIsAddSubjectOpen(false);
                 setNewSubCode("");
                 setNewSubName("");
+                setNewSubNewClassName("");
                 saveAccountData();
               }}
               className="space-y-4"
             >
-              {/* Select Classroom */}
+              {/* Classroom Specification */}
               <div>
                 <label className="block text-xs font-bold text-muted-foreground mb-1">
-                  ห้องเรียนที่สอน (เลือกระดับชั้น/ห้องเรียน)
+                  ห้องเรียน (วิชานี้สำหรับนักเรียนห้องไหน)
                 </label>
-                <select
-                  value={newSubClassroomId || activeClassroomId || ""}
-                  onChange={(e) => setNewSubClassroomId(e.target.value)}
-                  required
-                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-3 text-xs font-bold outline-none focus:border-emerald-500 text-foreground cursor-pointer"
-                >
-                  {classrooms.map((c) => (
-                    <option key={c.id} value={c.id} className="dark:bg-card">
-                      ห้อง {c.name}
-                    </option>
-                  ))}
-                </select>
+                {classrooms.length > 0 ? (
+                  <div className="space-y-2">
+                    <select
+                      value={newSubClassroomId}
+                      onChange={(e) => setNewSubClassroomId(e.target.value)}
+                      required
+                      className="w-full rounded-2xl border border-border bg-background py-2.5 px-3 text-xs font-bold outline-none focus:border-emerald-500 text-foreground cursor-pointer"
+                    >
+                      {classrooms.map((c) => (
+                        <option key={c.id} value={c.id} className="dark:bg-card">
+                          ห้อง {c.name}
+                        </option>
+                      ))}
+                      <option value="NEW" className="text-emerald-600 font-bold dark:bg-card">
+                        + พิมพ์ชื่อห้องเรียนใหม่เอง...
+                      </option>
+                    </select>
+                    {newSubClassroomId === "NEW" && (
+                      <input
+                        type="text"
+                        placeholder="ระบุชื่อห้องเรียน เช่น ม.1 หรือ ม.1/1"
+                        value={newSubNewClassName}
+                        onChange={(e) => setNewSubNewClassName(e.target.value)}
+                        required
+                        className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground font-semibold"
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="ระบุชื่อห้องเรียน เช่น ม.1 หรือ ม.1/1"
+                      value={newSubNewClassName}
+                      onChange={(e) => setNewSubNewClassName(e.target.value)}
+                      required
+                      className="w-full rounded-2xl border border-border bg-background py-2.5 px-3 text-xs outline-none focus:border-emerald-500 text-foreground font-semibold"
+                      autoFocus
+                    />
+                    <span className="text-[10px] text-muted-foreground mt-1 block">
+                      ระบบจะสร้างห้องเรียนนี้และผูกกับวิชานี้ให้อัตโนมัติทันที
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Subject Code */}
@@ -661,7 +625,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                   onChange={(e) => setNewSubCode(e.target.value)}
                   required
                   className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground font-semibold"
-                  autoFocus
                 />
               </div>
 

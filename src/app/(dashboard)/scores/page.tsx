@@ -685,11 +685,13 @@ export default function ScoresPage() {
         <div className="p-4 px-6 border-b border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-foreground">
-              ตารางบันทึกวิชา {currentSubject?.name || "วิทยาศาสตร์"} (อัตโนมัติ)
+              ตารางบันทึกวิชา {currentSubject ? `${currentSubject.code} - ${currentSubject.name}` : "ยังไม่ได้เลือกวิชา"}
             </span>
-            <span className="text-[11px] text-muted-foreground">
-              - ห้อง {currentClass?.name || "ม.1"}
-            </span>
+            {currentClass && (
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+                ห้อง {currentClass.name}
+              </span>
+            )}
           </div>
 
           <div className="relative w-full sm:max-w-xs">

@@ -332,13 +332,15 @@ export default function SettingsPage() {
   const [editingSubject, setEditingSubject] = useState<any | null>(null);
   
   const [subClassroomId, setSubClassroomId] = useState("");
+  const [subNewClassName, setSubNewClassName] = useState("");
   const [subCode, setSubCode] = useState("");
   const [subName, setSubName] = useState("");
   const [subCredit, setSubCredit] = useState(1.5);
   const [subHours, setSubHours] = useState(3);
 
   const handleOpenAddSubject = () => {
-    setSubClassroomId(activeClassroomId || classrooms[0]?.id || "");
+    setSubClassroomId(activeClassroomId || (classrooms[0] ? classrooms[0].id : "NEW"));
+    setSubNewClassName("");
     setSubCode("");
     setSubName("");
     setSubCredit(1.5);
@@ -352,6 +354,7 @@ export default function SettingsPage() {
       scoreComponents.find(c => c.subjectId === subject.id)?.classroomId ||
       enrollments.find(e => e.subjectId === subject.id)?.classroomId || "";
     setSubClassroomId(matchedClassId);
+    setSubNewClassName("");
     setSubCode(subject.code);
     setSubName(subject.name);
     setSubCredit(subject.creditPoints);
@@ -363,8 +366,17 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!subCode.trim() || !subName.trim()) return;
 
+    let finalClassId = subClassroomId;
+    if (finalClassId === "NEW" || (!finalClassId && classrooms.length === 0)) {
+      if (!subNewClassName.trim()) {
+        alert("กรุณาระบุชื่อห้องเรียน เช่น ม.1 หรือ ม.1/1");
+        return;
+      }
+      finalClassId = addClassroom(subNewClassName.trim());
+    }
+
     if (isAddSubjectOpen) {
-      addSubject(subCode.trim(), subName.trim(), subCredit, subHours, subClassroomId);
+      addSubject(subCode.trim(), subName.trim(), subCredit, subHours, finalClassId);
       setIsAddSubjectOpen(false);
       saveAccountData();
       alert("เพิ่มวิชาเรียนใหม่สำเร็จ");
@@ -375,7 +387,7 @@ export default function SettingsPage() {
         name: subName.trim(),
         creditPoints: subCredit,
         hoursPerWeek: subHours,
-        classroomId: subClassroomId || undefined
+        classroomId: finalClassId || undefined
       });
       setIsEditSubjectOpen(false);
       saveAccountData();
@@ -1120,19 +1132,53 @@ export default function SettingsPage() {
 
             <form onSubmit={handleSaveSubject} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-muted-foreground mb-1">ห้องเรียนที่สอน (เลือกระดับชั้น/ห้องเรียน)</label>
-                <select
-                  value={subClassroomId}
-                  onChange={(e) => setSubClassroomId(e.target.value)}
-                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-sm outline-none focus:border-emerald-500 text-foreground cursor-pointer font-medium"
-                >
-                  <option value="">-- ไม่ระบุ (ทุกห้องเรียน) --</option>
-                  {classrooms.map((c) => (
-                    <option key={c.id} value={c.id} className="dark:bg-card">
-                      ห้อง {c.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">
+                  ห้องเรียน (วิชานี้สำหรับนักเรียนห้องไหน)
+                </label>
+                {classrooms.length > 0 ? (
+                  <div className="space-y-2">
+                    <select
+                      value={subClassroomId}
+                      onChange={(e) => setSubClassroomId(e.target.value)}
+                      className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground cursor-pointer font-bold"
+                    >
+                      {classrooms.map((c) => (
+                        <option key={c.id} value={c.id} className="dark:bg-card">
+                          ห้อง {c.name}
+                        </option>
+                      ))}
+                      <option value="NEW" className="text-emerald-600 font-bold dark:bg-card">
+                        + พิมพ์ชื่อห้องเรียนใหม่เอง...
+                      </option>
+                    </select>
+                    {subClassroomId === "NEW" && (
+                      <input
+                        type="text"
+                        placeholder="ระบุชื่อห้องเรียน เช่น ม.1 หรือ ม.1/1"
+                        value={subNewClassName}
+                        onChange={(e) => setSubNewClassName(e.target.value)}
+                        required
+                        className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground font-semibold"
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="ระบุชื่อห้องเรียน เช่น ม.1 หรือ ม.1/1"
+                      value={subNewClassName}
+                      onChange={(e) => setSubNewClassName(e.target.value)}
+                      required
+                      className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground font-semibold"
+                      autoFocus
+                    />
+                    <span className="text-[10px] text-muted-foreground mt-1 block">
+                      ระบบจะสร้างห้องเรียนนี้และผูกกับวิชานี้ให้อัตโนมัติทันที
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>

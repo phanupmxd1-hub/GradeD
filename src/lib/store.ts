@@ -329,7 +329,7 @@ interface GMSState {
     schoolLogo?: string | null;
   }) => void;
   updateGradeRules: (ranges: GradeRange[]) => void;
-  addClassroom: (name: string, teacherId?: string) => void;
+  addClassroom: (name: string, teacherId?: string) => string;
   updateClassroom: (classroom: Classroom) => void;
   deleteClassroom: (id: string) => void;
   addSubject: (code: string, name: string, creditPoints: number, hoursPerWeek: number, classroomId?: string) => void;
@@ -447,13 +447,14 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               studentCount: c.student_count
             }));
 
-            const mappedSubjects = (subsRes.data || []).map((s: any) => ({
+            const mappedSubjects: Subject[] = (subsRes.data || []).map((s: any) => ({
               id: s.id,
               schoolId: s.school_id,
               code: s.code,
               name: s.name,
               creditPoints: Number(s.credit_points),
-              hoursPerWeek: Number(s.hours_per_week)
+              hoursPerWeek: Number(s.hours_per_week),
+              classroomId: s.classroom_id || undefined
             }));
 
             const mappedStudents = (stdsRes.data || []).map((s: any) => ({
@@ -585,13 +586,18 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               ? curState.activeSemesterId
               : (mappedSemesters.find((s: any) => s.status === "active" && s.academicYearId === activeYear)?.id || mappedSemesters[0]?.id || "");
 
-            const activeClass = (curState.activeClassroomId && mappedClassrooms.some((c: any) => c.id === curState.activeClassroomId))
-              ? curState.activeClassroomId
-              : (mappedClassrooms[0]?.id || "");
-
             const activeSub = (curState.activeSubjectId && mappedSubjects.some((s: any) => s.id === curState.activeSubjectId))
               ? curState.activeSubjectId
               : (mappedSubjects[0]?.id || "");
+
+            const subMatchedClass = mappedSubjects.find((s: any) => s.id === activeSub)?.classroomId ||
+              mappedComponents.find((c: any) => c.subjectId === activeSub)?.classroomId ||
+              mappedEnrollments.find((e: any) => e.subjectId === activeSub)?.classroomId;
+
+            const activeClass = subMatchedClass ||
+              ((curState.activeClassroomId && mappedClassrooms.some((c: any) => c.id === curState.activeClassroomId))
+                ? curState.activeClassroomId
+                : (mappedClassrooms[0]?.id || ""));
 
             set({
               activeSchoolId: mappedSchools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49",
@@ -1636,6 +1642,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           }
         ]
       });
+      return newId;
     },
 
     updateClassroom: (classroom) => {

@@ -63,6 +63,7 @@ export interface Subject {
   name: string;
   creditPoints: number;
   hoursPerWeek: number;
+  classroomId?: string;
 }
 
 export interface Student {
@@ -331,7 +332,7 @@ interface GMSState {
   addClassroom: (name: string, teacherId?: string) => void;
   updateClassroom: (classroom: Classroom) => void;
   deleteClassroom: (id: string) => void;
-  addSubject: (code: string, name: string, creditPoints: number, hoursPerWeek: number) => void;
+  addSubject: (code: string, name: string, creditPoints: number, hoursPerWeek: number, classroomId?: string) => void;
   updateSubject: (subject: Subject) => void;
   deleteSubject: (id: string) => void;
   addAcademicYear: (year: number) => void;
@@ -1748,9 +1749,11 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       });
     },
 
-    addSubject: (code, name, creditPoints, hoursPerWeek) => {
+    addSubject: (code, name, creditPoints, hoursPerWeek, classroomId) => {
       const state = get();
       const schoolId = state.activeSchoolId || state.schools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49";
+      const targetClassroomId = classroomId || state.activeClassroomId || state.classrooms[0]?.id;
+      const targetSemesterId = state.activeSemesterId || state.semesters[0]?.id;
       const newId = generateUUID();
       const newSubject: Subject = {
         id: newId,
@@ -1758,11 +1761,94 @@ export const useGMSStore = create<GMSState>()((set, get) => {
         code,
         name,
         creditPoints: Number(creditPoints),
-        hoursPerWeek: Number(hoursPerWeek)
+        hoursPerWeek: Number(hoursPerWeek),
+        classroomId: targetClassroomId
       };
+
+      const newEnrollments = [...state.enrollments];
+      const newScores = [...state.scores];
+      const newScoreComponents = [...state.scoreComponents];
+      const newGradeResults = [...state.gradeResults];
+
+      if (targetClassroomId) {
+        const studentsInClass = state.students.filter(s => s.classroomId === targetClassroomId);
+
+        // Enroll students in this subject
+        studentsInClass.forEach(std => {
+          newEnrollments.push({
+            id: generateUUID(),
+            studentId: std.id,
+            subjectId: newId,
+            semesterId: targetSemesterId,
+            classroomId: targetClassroomId,
+            status: "active"
+          });
+
+          newGradeResults.push({
+            id: generateUUID(),
+            studentId: std.id,
+            subjectId: newId,
+            semesterId: targetSemesterId,
+            classroomId: targetClassroomId,
+            rawScoreSum: 0,
+            bonusScoreSum: 0,
+            totalScore: 0,
+            grade: "0",
+            gpaPoints: 0,
+            isLocked: false,
+            updatedAt: new Date().toISOString(),
+            updatedBy: "mock-teacher-id-1"
+          });
+        });
+
+        // Initialize standard score components for this subject & classroom
+        const defaultComps = [
+          { name: "งาน 1", type: "assignment" as const, maxScore: 10, weightPercent: 10, order: 1 },
+          { name: "งาน 2", type: "assignment" as const, maxScore: 10, weightPercent: 10, order: 2 },
+          { name: "งาน 3", type: "assignment" as const, maxScore: 10, weightPercent: 10, order: 3 },
+          { name: "สอบกลางภาค", type: "exam" as const, maxScore: 20, weightPercent: 20, order: 4 },
+          { name: "งาน 4", type: "assignment" as const, maxScore: 10, weightPercent: 10, order: 5 },
+          { name: "งาน 5", type: "assignment" as const, maxScore: 10, weightPercent: 10, order: 6 },
+          { name: "งาน 6", type: "assignment" as const, maxScore: 10, weightPercent: 10, order: 7 },
+          { name: "สอบปลายภาค", type: "exam" as const, maxScore: 20, weightPercent: 20, order: 8 },
+        ];
+
+        defaultComps.forEach(comp => {
+          const compId = generateUUID();
+          newScoreComponents.push({
+            id: compId,
+            subjectId: newId,
+            semesterId: targetSemesterId,
+            classroomId: targetClassroomId,
+            name: comp.name,
+            type: comp.type,
+            maxScore: comp.maxScore,
+            weightPercent: comp.weightPercent,
+            order: comp.order
+          });
+
+          studentsInClass.forEach(std => {
+            newScores.push({
+              id: generateUUID(),
+              studentId: std.id,
+              scoreComponentId: compId,
+              score: 0,
+              isGraded: false,
+              updatedAt: new Date().toISOString(),
+              updatedBy: "mock-teacher-id-1"
+            });
+          });
+        });
+      }
+
       set({
         subjects: [...state.subjects, newSubject],
         activeSubjectId: newId,
+        activeClassroomId: targetClassroomId || state.activeClassroomId,
+        enrollments: newEnrollments,
+        scoreComponents: newScoreComponents,
+        scores: newScores,
+        gradeResults: newGradeResults,
         hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
@@ -1772,7 +1858,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             action: "CREATE",
             resourceType: "subject",
             resourceId: newId,
-            description: `สร้างรายวิชาใหม่ ${code} ${name}`,
+            description: `สร้างรายวิชาใหม่ ${code} ${name}${targetClassroomId ? ` (สำหรับห้อง ${state.classrooms.find(c => c.id === targetClassroomId)?.name || ""})` : ""}`,
             timestamp: new Date().toISOString()
           }
         ]

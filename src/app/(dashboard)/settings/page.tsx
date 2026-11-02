@@ -47,6 +47,8 @@ export default function SettingsPage() {
     addSubject,
     updateSubject,
     deleteSubject,
+    scoreComponents,
+    enrollments,
     classrooms,
     addClassroom,
     updateClassroom,
@@ -329,12 +331,14 @@ export default function SettingsPage() {
   const [isEditSubjectOpen, setIsEditSubjectOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<any | null>(null);
   
+  const [subClassroomId, setSubClassroomId] = useState("");
   const [subCode, setSubCode] = useState("");
   const [subName, setSubName] = useState("");
   const [subCredit, setSubCredit] = useState(1.5);
   const [subHours, setSubHours] = useState(3);
 
   const handleOpenAddSubject = () => {
+    setSubClassroomId(activeClassroomId || classrooms[0]?.id || "");
     setSubCode("");
     setSubName("");
     setSubCredit(1.5);
@@ -344,6 +348,10 @@ export default function SettingsPage() {
 
   const handleOpenEditSubject = (subject: any) => {
     setEditingSubject(subject);
+    const matchedClassId = subject.classroomId || 
+      scoreComponents.find(c => c.subjectId === subject.id)?.classroomId ||
+      enrollments.find(e => e.subjectId === subject.id)?.classroomId || "";
+    setSubClassroomId(matchedClassId);
     setSubCode(subject.code);
     setSubName(subject.name);
     setSubCredit(subject.creditPoints);
@@ -356,7 +364,7 @@ export default function SettingsPage() {
     if (!subCode.trim() || !subName.trim()) return;
 
     if (isAddSubjectOpen) {
-      addSubject(subCode.trim(), subName.trim(), subCredit, subHours);
+      addSubject(subCode.trim(), subName.trim(), subCredit, subHours, subClassroomId);
       setIsAddSubjectOpen(false);
       saveAccountData();
       alert("เพิ่มวิชาเรียนใหม่สำเร็จ");
@@ -366,7 +374,8 @@ export default function SettingsPage() {
         code: subCode.trim(),
         name: subName.trim(),
         creditPoints: subCredit,
-        hoursPerWeek: subHours
+        hoursPerWeek: subHours,
+        classroomId: subClassroomId || undefined
       });
       setIsEditSubjectOpen(false);
       saveAccountData();
@@ -916,6 +925,7 @@ export default function SettingsPage() {
               <tr>
                 <th className="p-4 w-32">รหัสวิชา</th>
                 <th className="p-4">ชื่อรายวิชา</th>
+                <th className="p-4 w-36 text-center">ห้องเรียนที่สอน</th>
                 <th className="p-4 w-28 text-center">หน่วยกิต</th>
                 <th className="p-4 w-32 text-center">ชั่วโมง / สัปดาห์</th>
                 <th className="p-4 w-28 text-center">จัดการ</th>
@@ -924,35 +934,47 @@ export default function SettingsPage() {
             <tbody className="divide-y divide-border">
               {subjects.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-muted-foreground">ไม่พบข้อมูลรายวิชาในระบบ</td>
+                  <td colSpan={6} className="p-8 text-center text-muted-foreground">ไม่พบข้อมูลรายวิชาในระบบ</td>
                 </tr>
               ) : (
-                subjects.map((sub) => (
-                  <tr key={sub.id} className="hover:bg-muted/10">
-                    <td className="p-4 font-mono font-bold text-foreground">{sub.code}</td>
-                    <td className="p-4 font-semibold text-foreground">{sub.name}</td>
-                    <td className="p-4 text-center text-foreground font-semibold">{sub.creditPoints} หน่วยกิต</td>
-                    <td className="p-4 text-center text-foreground">{sub.hoursPerWeek} ชม.</td>
-                    <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => handleOpenEditSubject(sub)}
-                          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-emerald-600 transition-colors"
-                          title="แก้ไขรายวิชา"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSubject(sub.id)}
-                          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
-                          title="ลบรายวิชา"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                subjects.map((sub) => {
+                  const matchedClassId = sub.classroomId || 
+                    scoreComponents.find(c => c.subjectId === sub.id)?.classroomId ||
+                    enrollments.find(e => e.subjectId === sub.id)?.classroomId;
+                  const matchedClass = classrooms.find(c => c.id === matchedClassId);
+
+                  return (
+                    <tr key={sub.id} className="hover:bg-muted/10">
+                      <td className="p-4 font-mono font-bold text-foreground">{sub.code}</td>
+                      <td className="p-4 font-semibold text-foreground">{sub.name}</td>
+                      <td className="p-4 text-center">
+                        <span className="px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs border border-emerald-500/20">
+                          {matchedClass ? `ห้อง ${matchedClass.name}` : "ทุกห้อง"}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center text-foreground font-semibold">{sub.creditPoints} หน่วยกิต</td>
+                      <td className="p-4 text-center text-foreground">{sub.hoursPerWeek} ชม.</td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditSubject(sub)}
+                            className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-emerald-600 transition-colors"
+                            title="แก้ไขรายวิชา"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSubject(sub.id)}
+                            className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+                            title="ลบรายวิชา"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1097,6 +1119,22 @@ export default function SettingsPage() {
             </h3>
 
             <form onSubmit={handleSaveSubject} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ห้องเรียนที่สอน (เลือกระดับชั้น/ห้องเรียน)</label>
+                <select
+                  value={subClassroomId}
+                  onChange={(e) => setSubClassroomId(e.target.value)}
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-sm outline-none focus:border-emerald-500 text-foreground cursor-pointer font-medium"
+                >
+                  <option value="">-- ไม่ระบุ (ทุกห้องเรียน) --</option>
+                  {classrooms.map((c) => (
+                    <option key={c.id} value={c.id} className="dark:bg-card">
+                      ห้อง {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-muted-foreground mb-1">รหัสวิชา</label>
                 <input

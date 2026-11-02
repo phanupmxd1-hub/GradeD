@@ -70,6 +70,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     setActiveSubjectId,
     calculateGrades,
     addClassroom,
+    addSubject,
+    scoreComponents,
+    enrollments,
     loadAccountData,
     syncStatus,
     syncError,
@@ -86,6 +89,55 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [isAddClassOpen, setIsAddClassOpen] = useState(false);
   const [newClassName, setNewClassName] = useState("");
+  const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
+  const [newSubClassroomId, setNewSubClassroomId] = useState("");
+  const [newSubCode, setNewSubCode] = useState("");
+  const [newSubName, setNewSubName] = useState("");
+  const [newSubCredit, setNewSubCredit] = useState(1.5);
+  const [newSubHours, setNewSubHours] = useState(3);
+
+  // Helper to find which classroom a subject belongs to
+  const getSubjectClassroomId = (subjectId: string) => {
+    const s = subjects.find(sub => sub.id === subjectId);
+    return s?.classroomId || 
+      scoreComponents.find(c => c.subjectId === subjectId)?.classroomId ||
+      enrollments.find(e => e.subjectId === subjectId)?.classroomId;
+  };
+
+  // Auto-synchronize classroom and subject when selecting
+  const handleSubjectChange = (subjectId: string) => {
+    if (subjectId === "ADD_NEW") {
+      setNewSubClassroomId(activeClassroomId || classrooms[0]?.id || "");
+      setNewSubCode("");
+      setNewSubName("");
+      setNewSubCredit(1.5);
+      setNewSubHours(3);
+      setIsAddSubjectOpen(true);
+    } else {
+      setActiveSubjectId(subjectId);
+      // Auto-switch classroom to match the selected subject
+      const matchedClassId = getSubjectClassroomId(subjectId);
+      if (matchedClassId && classrooms.some(c => c.id === matchedClassId)) {
+        setActiveClassroomId(matchedClassId);
+      }
+    }
+  };
+
+  const handleClassroomChange = (classroomId: string) => {
+    if (classroomId === "ADD_NEW") {
+      setIsAddClassOpen(true);
+    } else {
+      setActiveClassroomId(classroomId);
+      // If current subject is for another classroom, automatically switch to a subject of this classroom
+      const currentSubClassId = getSubjectClassroomId(activeSubjectId);
+      if (currentSubClassId && currentSubClassId !== classroomId) {
+        const matchingSub = subjects.find(s => getSubjectClassroomId(s.id) === classroomId);
+        if (matchingSub) {
+          setActiveSubjectId(matchingSub.id);
+        }
+      }
+    }
+  };
 
   // Load account data from Firestore when user changes
   useEffect(() => {
@@ -312,13 +364,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               <div className="relative group">
                 <select
                   value={activeClassroomId}
-                  onChange={(e) => {
-                    if (e.target.value === "ADD_NEW") {
-                      setIsAddClassOpen(true);
-                    } else {
-                      setActiveClassroomId(e.target.value);
-                    }
-                  }}
+                  onChange={(e) => handleClassroomChange(e.target.value)}
                   className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-semibold text-foreground outline-none cursor-pointer"
                 >
                   {classrooms.filter(c => c.academicYearId === activeAcademicYearId).map(c => (
@@ -334,18 +380,18 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               <div className="relative group">
                 <select
                   value={activeSubjectId}
-                  onChange={(e) => {
-                    if (e.target.value === "ADD_NEW") {
-                      router.push("/settings");
-                    } else {
-                      setActiveSubjectId(e.target.value);
-                    }
-                  }}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
                   className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-semibold text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer"
                 >
-                  {subjects.map(s => (
-                    <option key={s.id} value={s.id} className="dark:bg-card">{s.code} - {s.name}</option>
-                  ))}
+                  {subjects.map(s => {
+                    const matchedClassId = getSubjectClassroomId(s.id);
+                    const matchedClass = classrooms.find(c => c.id === matchedClassId);
+                    return (
+                      <option key={s.id} value={s.id} className="dark:bg-card">
+                        {s.code} - {s.name}{matchedClass ? ` (ห้อง ${matchedClass.name})` : ""}
+                      </option>
+                    );
+                  })}
                   <option value="ADD_NEW" className="text-emerald-600 font-bold dark:bg-card">+ เพิ่มวิชาเรียนใหม่...</option>
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-emerald-600 pointer-events-none" />
@@ -448,13 +494,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           </select>
           <select
             value={activeClassroomId}
-            onChange={(e) => {
-              if (e.target.value === "ADD_NEW") {
-                setIsAddClassOpen(true);
-              } else {
-                setActiveClassroomId(e.target.value);
-              }
-            }}
+            onChange={(e) => handleClassroomChange(e.target.value)}
             className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-medium text-foreground cursor-pointer"
           >
             {classrooms.filter(c => c.academicYearId === activeAcademicYearId).map(c => (
@@ -464,18 +504,18 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           </select>
           <select
             value={activeSubjectId}
-            onChange={(e) => {
-              if (e.target.value === "ADD_NEW") {
-                router.push("/settings");
-              } else {
-                setActiveSubjectId(e.target.value);
-              }
-            }}
+            onChange={(e) => handleSubjectChange(e.target.value)}
             className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-medium text-foreground cursor-pointer"
           >
-            {subjects.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
+            {subjects.map(s => {
+              const matchedClassId = getSubjectClassroomId(s.id);
+              const matchedClass = classrooms.find(c => c.id === matchedClassId);
+              return (
+                <option key={s.id} value={s.id}>
+                  {s.name}{matchedClass ? ` (ห้อง ${matchedClass.name})` : ""}
+                </option>
+              );
+            })}
             <option value="ADD_NEW">+ เพิ่มวิชาเรียน...</option>
           </select>
         </div>
@@ -560,6 +600,129 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Subject Dialog Modal with Classroom Selector */}
+      {isAddSubjectOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4">
+          <div className="glass w-full max-w-md rounded-3xl p-6 md:p-8 animate-in zoom-in-95 duration-200 border border-border shadow-2xl">
+            <h3 className="text-lg font-bold mb-1 text-foreground">เพิ่มวิชาเรียนใหม่</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              กำหนดห้องเรียนและวิชาที่สอน เพื่อเชื่อมโยงตารางบันทึกคะแนนและข้อมูลให้อัตโนมัติ
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newSubCode.trim() || !newSubName.trim()) return;
+                const chosenClassId = newSubClassroomId || activeClassroomId || classrooms[0]?.id;
+                addSubject(
+                  newSubCode.trim(),
+                  newSubName.trim(),
+                  newSubCredit,
+                  newSubHours,
+                  chosenClassId
+                );
+                setIsAddSubjectOpen(false);
+                setNewSubCode("");
+                setNewSubName("");
+                saveAccountData();
+              }}
+              className="space-y-4"
+            >
+              {/* Select Classroom */}
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">
+                  ห้องเรียนที่สอน (เลือกระดับชั้น/ห้องเรียน)
+                </label>
+                <select
+                  value={newSubClassroomId || activeClassroomId || ""}
+                  onChange={(e) => setNewSubClassroomId(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2.5 px-3 text-xs font-bold outline-none focus:border-emerald-500 text-foreground cursor-pointer"
+                >
+                  {classrooms.map((c) => (
+                    <option key={c.id} value={c.id} className="dark:bg-card">
+                      ห้อง {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Subject Code */}
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">รหัสวิชา</label>
+                <input
+                  type="text"
+                  placeholder="เช่น ว21101 หรือ ค21101"
+                  value={newSubCode}
+                  onChange={(e) => setNewSubCode(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground font-semibold"
+                  autoFocus
+                />
+              </div>
+
+              {/* Subject Name */}
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-1">ชื่อรายวิชา</label>
+                <input
+                  type="text"
+                  placeholder="เช่น วิทยาศาสตร์ 1 หรือ ภาษาไทย"
+                  value={newSubName}
+                  onChange={(e) => setNewSubName(e.target.value)}
+                  required
+                  className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground font-semibold"
+                />
+              </div>
+
+              {/* Credit & Hours */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1">หน่วยกิต</label>
+                  <input
+                    type="number"
+                    value={newSubCredit}
+                    onChange={(e) => setNewSubCredit(parseFloat(e.target.value) || 1)}
+                    min={0.5}
+                    max={5.0}
+                    step={0.5}
+                    required
+                    className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none text-foreground font-bold text-center"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground mb-1">ชั่วโมง / สัปดาห์</label>
+                  <input
+                    type="number"
+                    value={newSubHours}
+                    onChange={(e) => setNewSubHours(parseInt(e.target.value) || 1)}
+                    min={1}
+                    max={20}
+                    required
+                    className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none text-foreground font-bold text-center"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddSubjectOpen(false)}
+                  className="rounded-2xl border border-border bg-card px-4 py-2.5 text-xs font-semibold hover:bg-muted text-foreground"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-2xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                >
+                  สร้างวิชาเรียน
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

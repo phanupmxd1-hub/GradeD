@@ -344,41 +344,70 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               </div>
               <div className="h-4 w-px bg-border" />
 
-              {/* Subject Dropdown (Includes Classroom) */}
-              <div className="relative group">
-                <select
-                  value={activeSubjectId}
-                  onChange={(e) => handleSubjectChange(e.target.value)}
-                  className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer"
-                >
-                  {subjects.length > 0 ? (
-                    subjects.map(s => {
-                      const matchedClassId = getSubjectClassroomId(s.id);
-                      const matchedClass = classrooms.find(c => c.id === matchedClassId);
+              {/* Classroom Dropdown for Students page, or Subject Dropdown for other pages */}
+              {pathname === "/students" ? (
+                <div className="relative group">
+                  <select
+                    value={activeClassroomId}
+                    onChange={(e) => setActiveClassroomId(e.target.value)}
+                    className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer"
+                  >
+                    {classrooms.map(c => {
+                      const count = c.studentCount || 0;
                       return (
-                        <option key={s.id} value={s.id} className="dark:bg-card text-foreground font-semibold">
-                          {s.code} - {s.name}{matchedClass ? ` (ห้อง ${matchedClass.name})` : ""}
+                        <option key={c.id} value={c.id} className="dark:bg-card text-foreground font-semibold">
+                          ห้อง {c.name} ({count} คน)
                         </option>
                       );
-                    })
-                  ) : (
-                    <option value="" disabled className="dark:bg-card text-muted-foreground">
-                      -- ยังไม่มีวิชาเรียน --
+                    })}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+                </div>
+              ) : (
+                <div className="relative group">
+                  <select
+                    value={activeSubjectId}
+                    onChange={(e) => handleSubjectChange(e.target.value)}
+                    className="appearance-none bg-transparent py-1.5 pl-3 pr-8 text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none cursor-pointer"
+                  >
+                    {subjects.length > 0 ? (
+                      subjects.map(s => {
+                        const matchedClassId = getSubjectClassroomId(s.id);
+                        const matchedClass = classrooms.find(c => c.id === matchedClassId);
+                        return (
+                          <option key={s.id} value={s.id} className="dark:bg-card text-foreground font-semibold">
+                            {s.code} - {s.name}{matchedClass ? ` (ห้อง ${matchedClass.name})` : ""}
+                          </option>
+                        );
+                      })
+                    ) : (
+                      <option value="" disabled className="dark:bg-card text-muted-foreground">
+                        -- ยังไม่มีวิชาเรียน --
+                      </option>
+                    )}
+                    <option value="ADD_NEW" className="text-emerald-600 font-bold dark:bg-card">
+                      + เพิ่มวิชาเรียนใหม่...
                     </option>
-                  )}
-                  <option value="ADD_NEW" className="text-emerald-600 font-bold dark:bg-card">
-                    + เพิ่มวิชาเรียนใหม่...
-                  </option>
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-emerald-600 pointer-events-none" />
-              </div>
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+                </div>
+              )}
 
             </div>
 
             {/* Selection indicators on mobile */}
             <div className="lg:hidden flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-full">
-              <BookOpen className="h-3.5 w-3.5" />
-              <span>{currentSubject ? `${currentSubject.code} ${currentSubject.name}${currentClass ? ` (ห้อง ${currentClass.name})` : ""}` : "ยังไม่ได้เลือกวิชา"}</span>
+              {pathname === "/students" ? (
+                <>
+                  <Users className="h-3.5 w-3.5" />
+                  <span>{currentClass ? `ห้อง ${currentClass.name}` : "ยังไม่ได้เลือกห้อง"}</span>
+                </>
+              ) : (
+                <>
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>{currentSubject ? `${currentSubject.code} ${currentSubject.name}${currentClass ? ` (ห้อง ${currentClass.name})` : ""}` : "ยังไม่ได้เลือกวิชา"}</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -468,22 +497,36 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               <option key={s.id} value={s.id}>เทอม {s.semesterNo}</option>
             ))}
           </select>
-          <select
-            value={activeSubjectId}
-            onChange={(e) => handleSubjectChange(e.target.value)}
-            className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 cursor-pointer"
-          >
-            {subjects.map(s => {
-              const matchedClassId = getSubjectClassroomId(s.id);
-              const matchedClass = classrooms.find(c => c.id === matchedClassId);
-              return (
-                <option key={s.id} value={s.id}>
-                  {s.name}{matchedClass ? ` (ห้อง ${matchedClass.name})` : ""}
+          {pathname === "/students" ? (
+            <select
+              value={activeClassroomId}
+              onChange={(e) => setActiveClassroomId(e.target.value)}
+              className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 cursor-pointer"
+            >
+              {classrooms.map(c => (
+                <option key={c.id} value={c.id}>
+                  ห้อง {c.name}
                 </option>
-              );
-            })}
-            <option value="ADD_NEW">+ เพิ่มวิชาเรียน...</option>
-          </select>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={activeSubjectId}
+              onChange={(e) => handleSubjectChange(e.target.value)}
+              className="bg-card border border-border rounded-xl px-2 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 cursor-pointer"
+            >
+              {subjects.map(s => {
+                const matchedClassId = getSubjectClassroomId(s.id);
+                const matchedClass = classrooms.find(c => c.id === matchedClassId);
+                return (
+                  <option key={s.id} value={s.id}>
+                    {s.name}{matchedClass ? ` (ห้อง ${matchedClass.name})` : ""}
+                  </option>
+                );
+              })}
+              <option value="ADD_NEW">+ เพิ่มวิชาเรียน...</option>
+            </select>
+          )}
         </div>
 
         {/* Dashboard Main Content Scroll Container */}

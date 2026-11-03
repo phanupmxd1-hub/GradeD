@@ -15,7 +15,8 @@ import {
   AlertTriangle,
   UserPlus,
   Edit2,
-  Users
+  Users,
+  ChevronDown
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -25,6 +26,7 @@ export default function StudentsPage() {
     classrooms,
     activeClassroomId,
     activeSubjectId,
+    setActiveClassroomId,
     addStudent,
     updateStudent,
     deleteStudent,
@@ -351,8 +353,27 @@ export default function StudentsPage() {
       {/* Header and Summary Panel */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">รายชื่อนักเรียนห้อง {currentClass?.name}</h2>
-          <p className="text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-2xl font-bold tracking-tight">รายชื่อนักเรียนห้อง</h2>
+            <div className="relative">
+              <select
+                value={activeClassroomId}
+                onChange={(e) => setActiveClassroomId(e.target.value)}
+                className="appearance-none bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold text-lg px-4 py-1.5 pr-9 rounded-2xl border border-emerald-500/30 cursor-pointer transition-all outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+              >
+                {classrooms.map((c) => {
+                  const count = students.filter(s => s.classroomId === c.id).length;
+                  return (
+                    <option key={c.id} value={c.id} className="text-foreground bg-card text-sm">
+                      ห้อง {c.name} ({count} คน)
+                    </option>
+                  );
+                })}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600 pointer-events-none" />
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
             จัดการข้อมูลนักเรียน รายชื่อ ย้ายห้องเรียน เลื่อนชั้นเรียน และนำเข้า-ส่งออกไฟล์ CSV / Excel
           </p>
         </div>

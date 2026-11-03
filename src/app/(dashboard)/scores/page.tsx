@@ -44,6 +44,7 @@ export default function ScoresPage() {
     semesters,
     classrooms,
     subjects,
+    enrollments,
     scoreComponents,
     scores,
     bonusScores,
@@ -62,14 +63,40 @@ export default function ScoresPage() {
     saveAccountData,
     syncStatus,
     lastSavedTime,
-    hasUnsavedChanges
+    hasUnsavedChanges,
+    setActiveClassroomId
   } = useGMSStore();
 
-  // Active Context metadata
-  const currentClass = classrooms.find(c => c.id === activeClassroomId);
   const currentSubject = subjects.find(s => s.id === activeSubjectId);
   const currentYear = academicYears.find(y => y.id === activeAcademicYearId);
   const currentSemester = semesters.find(s => s.id === activeSemesterId);
+
+  // Auto-resolve target classroom from subject or activeClassroomId
+  const targetClassId = useMemo(() => {
+    if (activeClassroomId && classrooms.some(c => c.id === activeClassroomId)) {
+      if (students.some(s => s.classroomId === activeClassroomId)) {
+        return activeClassroomId;
+      }
+    }
+    const subClassId = currentSubject?.classroomId ||
+      scoreComponents.find(c => c.subjectId === activeSubjectId)?.classroomId ||
+      enrollments.find(e => e.subjectId === activeSubjectId)?.classroomId;
+    if (subClassId && classrooms.some(c => c.id === subClassId)) {
+      return subClassId;
+    }
+    const classWithStudents = classrooms.find(c => students.some(s => s.classroomId === c.id));
+    if (classWithStudents) return classWithStudents.id;
+    return activeClassroomId || classrooms[0]?.id || "";
+  }, [activeClassroomId, classrooms, students, currentSubject, scoreComponents, enrollments, activeSubjectId]);
+
+  // Keep store's activeClassroomId in sync if mismatch
+  useEffect(() => {
+    if (targetClassId && targetClassId !== activeClassroomId) {
+      setActiveClassroomId(targetClassId);
+    }
+  }, [targetClassId, activeClassroomId, setActiveClassroomId]);
+
+  const currentClass = classrooms.find(c => c.id === targetClassId);
 
   // Modals & Mode States
   const [isCompOpen, setIsCompOpen] = useState(false);
@@ -133,19 +160,25 @@ export default function ScoresPage() {
 
   // Active students sorted by roll number
   const activeStudents = useMemo(() => {
-    return students
-      .filter(s => s.classroomId === activeClassroomId)
-      .sort((a, b) => a.rollNo - b.rollNo);
-  }, [students, activeClassroomId]);
+    const byClass = students.filter(s => s.classroomId === targetClassId);
+    if (byClass.length > 0) {
+      return byClass.sort((a, b) => a.rollNo - b.rollNo);
+    }
+    // Fallback if all students in single school
+    if (students.length > 0) {
+      return [...students].sort((a, b) => a.rollNo - b.rollNo);
+    }
+    return [];
+  }, [students, targetClassId]);
 
   // Active score components sorted by order
   const activeComponents = useMemo(() => {
     return scoreComponents
-      .filter(c => c.classroomId === activeClassroomId && 
+      .filter(c => (c.classroomId === targetClassId || !c.classroomId) && 
                    c.subjectId === activeSubjectId && 
                    c.semesterId === activeSemesterId)
       .sort((a, b) => a.order - b.order);
-  }, [scoreComponents, activeClassroomId, activeSubjectId, activeSemesterId]);
+  }, [scoreComponents, targetClassId, activeSubjectId, activeSemesterId]);
 
   // Auto-select initial speed grading component
   useEffect(() => {

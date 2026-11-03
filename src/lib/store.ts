@@ -369,278 +369,285 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       const normalized = email.toLowerCase().trim();
       set({ currentAccountEmail: normalized });
 
-      const isSupabaseAvailable = () => {
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-        return Boolean(url && url.includes("supabase.co") && key && key.length > 20 && !url.includes("placeholder"));
-      };
+      try {
+        const [
+          schoolsRes,
+          yearsRes,
+          semsRes,
+          classesRes,
+          subsRes,
+          stdsRes,
+          enrollsRes,
+          sessionsRes,
+          recordsRes,
+          compsRes,
+          scoresRes,
+          bonusRes,
+          rulesRes,
+          resultsRes
+        ] = await Promise.all([
+          supabase.from("schools").select("*"),
+          supabase.from("academic_years").select("*"),
+          supabase.from("semesters").select("*"),
+          supabase.from("classrooms").select("*"),
+          supabase.from("subjects").select("*"),
+          supabase.from("students").select("*"),
+          supabase.from("enrollments").select("*"),
+          supabase.from("attendance_sessions").select("*"),
+          supabase.from("attendance_records").select("*"),
+          supabase.from("score_components").select("*"),
+          supabase.from("scores").select("*"),
+          supabase.from("bonus_scores").select("*"),
+          supabase.from("grade_rules").select("*"),
+          supabase.from("grade_results").select("*")
+        ]);
 
-      if (isSupabaseAvailable()) {
-        try {
-          const [
-            schoolsRes,
-            yearsRes,
-            semsRes,
-            classesRes,
-            subsRes,
-            stdsRes,
-            enrollsRes,
-            sessionsRes,
-            recordsRes,
-            compsRes,
-            scoresRes,
-            bonusRes,
-            rulesRes,
-            resultsRes
-          ] = await Promise.all([
-            supabase.from("schools").select("*"),
-            supabase.from("academic_years").select("*"),
-            supabase.from("semesters").select("*"),
-            supabase.from("classrooms").select("*"),
-            supabase.from("subjects").select("*"),
-            supabase.from("students").select("*"),
-            supabase.from("enrollments").select("*"),
-            supabase.from("attendance_sessions").select("*"),
-            supabase.from("attendance_records").select("*"),
-            supabase.from("score_components").select("*"),
-            supabase.from("scores").select("*"),
-            supabase.from("bonus_scores").select("*"),
-            supabase.from("grade_rules").select("*"),
-            supabase.from("grade_results").select("*")
-          ]);
+        const mappedSchools = (schoolsRes.data || []).map((s: any) => ({
+          id: s.id,
+          nameTh: s.name_th,
+          nameEn: s.name_en,
+          logoUrl: s.logo_url,
+          status: s.status
+        }));
 
-          if (schoolsRes.data && schoolsRes.data.length > 0) {
-            let savedBranding: any = {};
-            try {
-              const raw = localStorage.getItem("graded_branding");
-              if (raw) savedBranding = JSON.parse(raw);
-            } catch (e) {}
-
-            const mappedSchools = schoolsRes.data.map((s: any) => ({
-              id: s.id,
-              nameTh: s.name_th,
-              nameEn: s.name_en,
-              logoUrl: s.logo_url,
-              status: s.status
-            }));
-
-            const mappedYears = (yearsRes.data || []).map((y: any) => ({
-              id: y.id,
-              schoolId: y.school_id,
-              year: y.year,
-              status: y.status
-            }));
-
-            const mappedSemesters = (semsRes.data || []).map((s: any) => ({
-              id: s.id,
-              academicYearId: s.academic_year_id,
-              semesterNo: s.semester_no,
-              status: s.status
-            }));
-
-            const mappedClassrooms = (classesRes.data || []).map((c: any) => ({
-              id: c.id,
-              schoolId: c.school_id,
-              academicYearId: c.academic_year_id,
-              name: c.name,
-              teacherId: c.teacher_id,
-              studentCount: c.student_count
-            }));
-
-            const mappedSubjects: Subject[] = (subsRes.data || []).map((s: any) => ({
-              id: s.id,
-              schoolId: s.school_id,
-              code: s.code,
-              name: s.name,
-              creditPoints: Number(s.credit_points),
-              hoursPerWeek: Number(s.hours_per_week),
-              classroomId: s.classroom_id || undefined
-            }));
-
-            const mappedStudents = (stdsRes.data || []).map((s: any) => ({
-              id: s.id,
-              schoolId: s.school_id,
-              classroomId: s.classroom_id,
-              prefix: s.prefix,
-              firstName: s.first_name,
-              lastName: s.last_name,
-              gender: s.gender,
-              rollNo: s.roll_no,
-              status: s.status
-            }));
-
-            const mappedEnrollments = (enrollsRes.data || []).map((e: any) => ({
-              id: e.id,
-              studentId: e.student_id,
-              subjectId: e.subject_id,
-              semesterId: e.semester_id,
-              classroomId: e.classroom_id,
-              status: e.status
-            }));
-
-            const mappedSessions = (sessionsRes.data || []).map((s: any) => ({
-              id: s.id,
-              schoolId: s.school_id,
-              classroomId: s.classroom_id,
-              subjectId: s.subject_id,
-              semesterId: s.semester_id,
-              date: s.date,
-              sessionNo: s.session_no
-            }));
-
-            const mappedRecords = (recordsRes.data || []).map((r: any) => ({
-              id: r.id,
-              sessionId: r.session_id,
-              studentId: r.student_id,
-              status: r.status,
-              remarks: r.remarks,
-              updatedAt: r.updated_at,
-              updatedBy: r.updated_by
-            }));
-
-            let mappedComponents = (compsRes.data || []).map((c: any) => ({
-              id: c.id,
-              subjectId: c.subject_id,
-              semesterId: c.semester_id,
-              classroomId: c.classroom_id,
-              name: c.name,
-              type: c.type,
-              maxScore: Number(c.max_score),
-              weightPercent: Number(c.weight_percent),
-              order: c.order_no
-            }));
-
-            // If score components are empty in database, initialize standard default components for available classrooms and subjects
-            if (mappedComponents.length === 0 && mappedClassrooms.length > 0 && mappedSubjects.length > 0 && mappedSemesters.length > 0) {
-              const defaultComps: ScoreComponent[] = [];
-              mappedClassrooms.forEach((cls: any) => {
-                mappedSubjects.forEach((sub: any) => {
-                  const sem = mappedSemesters[0];
-                  defaultComps.push(
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 1", type: "assignment", maxScore: 10, weightPercent: 10, order: 1 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 2", type: "assignment", maxScore: 10, weightPercent: 10, order: 2 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 3", type: "assignment", maxScore: 10, weightPercent: 10, order: 3 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "สอบกลางภาค", type: "exam", maxScore: 20, weightPercent: 20, order: 4 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 4", type: "assignment", maxScore: 10, weightPercent: 10, order: 5 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 5", type: "assignment", maxScore: 10, weightPercent: 10, order: 6 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 6", type: "assignment", maxScore: 10, weightPercent: 10, order: 7 },
-                    { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "สอบปลายภาค", type: "exam", maxScore: 20, weightPercent: 20, order: 8 }
-                  );
-                });
-              });
-              mappedComponents = defaultComps;
-            }
-
-            const mappedScores = (scoresRes.data || []).map((sc: any) => ({
-              id: sc.id,
-              studentId: sc.student_id,
-              scoreComponentId: sc.score_component_id,
-              score: Number(sc.score),
-              isGraded: sc.is_graded,
-              remarks: sc.remarks,
-              updatedAt: sc.updated_at,
-              updatedBy: sc.updated_by
-            }));
-
-            const mappedBonus = (bonusRes.data || []).map((b: any) => ({
-              id: b.id,
-              studentId: b.student_id,
-              subjectId: b.subject_id,
-              semesterId: b.semester_id,
-              points: Number(b.points),
-              reason: b.reason,
-              timestamp: b.created_at,
-              createdBy: b.created_by
-            }));
-
-            const rawRule = (rulesRes.data && rulesRes.data[0]) || null;
-            const mappedRule = rawRule ? {
-              id: rawRule.id,
-              schoolId: rawRule.school_id,
-              subjectId: rawRule.subject_id,
-              ranges: Array.isArray(rawRule.ranges) ? rawRule.ranges : JSON.parse(rawRule.ranges || "[]")
-            } : createDefaultInitialState().gradeRules;
-
-            const mappedResults = (resultsRes.data || []).map((gr: any) => ({
-              id: gr.id,
-              studentId: gr.student_id,
-              subjectId: gr.subject_id,
-              semesterId: gr.semester_id,
-              classroomId: gr.classroom_id || gr.classroomid || mappedClassrooms[0]?.id || "",
-              rawScoreSum: Number(gr.raw_score_sum),
-              bonusScoreSum: Number(gr.bonus_score_sum),
-              totalScore: Number(gr.totalScore) || Number(gr.total_score) || 0,
-              grade: gr.grade,
-              gpaPoints: Number(gr.gpa_points),
-              isLocked: Boolean(gr.is_locked),
-              updatedAt: gr.updated_at,
-              updatedBy: gr.updated_by
-            }));
-
-            const curState = get();
-            const activeYear = (curState.activeAcademicYearId && mappedYears.some((y: any) => y.id === curState.activeAcademicYearId))
-              ? curState.activeAcademicYearId
-              : (mappedYears.find((y: any) => y.status === "active")?.id || mappedYears[0]?.id || "");
-
-            const activeSem = (curState.activeSemesterId && mappedSemesters.some((s: any) => s.id === curState.activeSemesterId))
-              ? curState.activeSemesterId
-              : (mappedSemesters.find((s: any) => s.status === "active" && s.academicYearId === activeYear)?.id || mappedSemesters[0]?.id || "");
-
-            const activeSub = (curState.activeSubjectId && mappedSubjects.some((s: any) => s.id === curState.activeSubjectId))
-              ? curState.activeSubjectId
-              : (mappedSubjects[0]?.id || "");
-
-            const subMatchedClass = mappedSubjects.find((s: any) => s.id === activeSub)?.classroomId ||
-              mappedComponents.find((c: any) => c.subjectId === activeSub)?.classroomId ||
-              mappedEnrollments.find((e: any) => e.subjectId === activeSub)?.classroomId;
-
-            const activeClass = subMatchedClass ||
-              ((curState.activeClassroomId && mappedClassrooms.some((c: any) => c.id === curState.activeClassroomId))
-                ? curState.activeClassroomId
-                : (mappedClassrooms[0]?.id || ""));
-
-            set({
-              activeSchoolId: mappedSchools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49",
-              activeAcademicYearId: activeYear,
-              activeSemesterId: activeSem,
-              activeClassroomId: activeClass,
-              activeSubjectId: activeSub,
-              mainTitle: mappedSchools[0]?.nameTh || savedBranding.mainTitle || "GradeD Portal",
-              subTitle: mappedSchools[0]?.nameEn || savedBranding.subTitle || "ระบบบันทึกผลการเรียนและเช็คชื่อนักเรียน",
-              teacherName: savedBranding.teacherName || "คุณครูผู้สอน",
-              teacherAvatar: savedBranding.teacherAvatar || null,
-              schoolLogo: mappedSchools[0]?.logoUrl || savedBranding.schoolLogo || null,
-              schools: mappedSchools,
-              academicYears: mappedYears,
-              semesters: mappedSemesters,
-              classrooms: mappedClassrooms,
-              subjects: mappedSubjects,
-              students: mappedStudents,
-              enrollments: mappedEnrollments,
-              attendanceSessions: mappedSessions,
-              attendanceRecords: mappedRecords,
-              scoreComponents: mappedComponents,
-              scores: mappedScores,
-              bonusScores: mappedBonus,
-              gradeRules: mappedRule,
-              gradeResults: mappedResults,
-              currentAccountEmail: normalized,
-              isDataLoaded: true,
-              hasUnsavedChanges: false,
-              undoStack: [],
-              redoStack: []
-            });
-
-            get().calculateGrades();
-            return;
-          }
-        } catch (e) {
-          console.warn("Error loading from Supabase:", e);
+        if (mappedSchools.length === 0) {
+          mappedSchools.push({
+            id: "f35acdc8-233d-b572-eedf-8f6d7da0ef49",
+            nameTh: "GradeD Portal",
+            nameEn: "ระบบบันทึกผลการเรียนและเช็คชื่อนักเรียน",
+            logoUrl: null,
+            status: "active"
+          });
         }
-      }
 
-      // Fallback
-      set({ isDataLoaded: true, hasUnsavedChanges: false });
+        const mappedYears = (yearsRes.data || []).map((y: any) => ({
+          id: y.id,
+          schoolId: y.school_id,
+          year: Number(y.year),
+          status: y.status
+        }));
+
+        if (mappedYears.length === 0) {
+          mappedYears.push({
+            id: "5da4f03a-f5aa-5b74-53e4-26539da2bed7",
+            schoolId: mappedSchools[0].id,
+            year: 2569,
+            status: "active"
+          });
+        }
+
+        const mappedSemesters: Semester[] = (semsRes.data || []).map((s: any) => ({
+          id: s.id,
+          academicYearId: s.academic_year_id,
+          semesterNo: (Number(s.semester_no) === 2 ? 2 : 1) as 1 | 2,
+          status: s.status
+        }));
+
+        if (mappedSemesters.length === 0 && mappedYears.length > 0) {
+          mappedSemesters.push(
+            { id: "0849a2cf-3ef4-265a-e5e1-3764b589c499", academicYearId: mappedYears[0].id, semesterNo: 1, status: "active" },
+            { id: "1cbcae4f-21f4-3d96-c67b-1cbcae4f21f4", academicYearId: mappedYears[0].id, semesterNo: 2, status: "closed" }
+          );
+        }
+
+        const mappedClassrooms = (classesRes.data || []).map((c: any) => ({
+          id: c.id,
+          schoolId: c.school_id,
+          academicYearId: c.academic_year_id,
+          name: c.name,
+          teacherId: c.teacher_id,
+          studentCount: Number(c.student_count) || 0
+        }));
+
+        const mappedSubjects: Subject[] = (subsRes.data || []).map((s: any) => ({
+          id: s.id,
+          schoolId: s.school_id,
+          code: s.code,
+          name: s.name,
+          creditPoints: Number(s.credit_points),
+          hoursPerWeek: Number(s.hours_per_week),
+          classroomId: s.classroom_id || undefined
+        }));
+
+        const mappedStudents = (stdsRes.data || []).map((s: any) => ({
+          id: s.id,
+          schoolId: s.school_id,
+          classroomId: s.classroom_id,
+          prefix: s.prefix,
+          firstName: s.first_name,
+          lastName: s.last_name,
+          gender: s.gender,
+          rollNo: Number(s.roll_no),
+          status: s.status
+        }));
+
+        const mappedEnrollments = (enrollsRes.data || []).map((e: any) => ({
+          id: e.id,
+          studentId: e.student_id,
+          subjectId: e.subject_id,
+          semesterId: e.semester_id,
+          classroomId: e.classroom_id,
+          status: e.status
+        }));
+
+        const mappedSessions = (sessionsRes.data || []).map((s: any) => ({
+          id: s.id,
+          schoolId: s.school_id,
+          classroomId: s.classroom_id,
+          subjectId: s.subject_id,
+          semesterId: s.semester_id,
+          date: s.date,
+          sessionNo: s.session_no
+        }));
+
+        const mappedRecords = (recordsRes.data || []).map((r: any) => ({
+          id: r.id,
+          sessionId: r.session_id,
+          studentId: r.student_id,
+          status: r.status,
+          remarks: r.remarks,
+          updatedAt: r.updated_at,
+          updatedBy: r.updated_by
+        }));
+
+        let mappedComponents = (compsRes.data || []).map((c: any) => ({
+          id: c.id,
+          subjectId: c.subject_id,
+          semesterId: c.semester_id,
+          classroomId: c.classroom_id,
+          name: c.name,
+          type: c.type,
+          maxScore: Number(c.max_score),
+          weightPercent: Number(c.weight_percent),
+          order: c.order_no
+        }));
+
+        // If score components are empty in database, initialize standard default components for available classrooms and subjects
+        if (mappedComponents.length === 0 && mappedClassrooms.length > 0 && mappedSubjects.length > 0 && mappedSemesters.length > 0) {
+          const defaultComps: ScoreComponent[] = [];
+          mappedClassrooms.forEach((cls: any) => {
+            mappedSubjects.forEach((sub: any) => {
+              const sem = mappedSemesters[0];
+              defaultComps.push(
+                { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 1", type: "assignment", maxScore: 10, weightPercent: 10, order: 1 },
+                { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 2", type: "assignment", maxScore: 10, weightPercent: 10, order: 2 },
+                { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 3", type: "assignment", maxScore: 10, weightPercent: 10, order: 3 },
+                { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "สอบกลางภาค", type: "exam", maxScore: 20, weightPercent: 20, order: 4 },
+                { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 4", type: "assignment", maxScore: 10, weightPercent: 10, order: 5 },
+                { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 5", type: "assignment", maxScore: 10, weightPercent: 10, order: 6 },
+                { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "งาน 6", type: "assignment", maxScore: 10, weightPercent: 10, order: 7 },
+                { id: generateUUID(), subjectId: sub.id, semesterId: sem.id, classroomId: cls.id, name: "สอบปลายภาค", type: "exam", maxScore: 20, weightPercent: 20, order: 8 }
+              );
+            });
+          });
+          mappedComponents = defaultComps;
+        }
+
+        const mappedScores = (scoresRes.data || []).map((sc: any) => ({
+          id: sc.id,
+          studentId: sc.student_id,
+          scoreComponentId: sc.score_component_id,
+          score: Number(sc.score),
+          isGraded: sc.is_graded,
+          remarks: sc.remarks,
+          updatedAt: sc.updated_at,
+          updatedBy: sc.updated_by
+        }));
+
+        const mappedBonus = (bonusRes.data || []).map((b: any) => ({
+          id: b.id,
+          studentId: b.student_id,
+          subjectId: b.subject_id,
+          semesterId: b.semester_id,
+          points: Number(b.points),
+          reason: b.reason,
+          timestamp: b.created_at,
+          createdBy: b.created_by
+        }));
+
+        const rawRule = (rulesRes.data && rulesRes.data[0]) || null;
+        const mappedRule = rawRule ? {
+          id: rawRule.id,
+          schoolId: rawRule.school_id,
+          subjectId: rawRule.subject_id,
+          ranges: Array.isArray(rawRule.ranges) ? rawRule.ranges : JSON.parse(rawRule.ranges || "[]")
+        } : createDefaultInitialState().gradeRules;
+
+        const mappedResults = (resultsRes.data || []).map((gr: any) => ({
+          id: gr.id,
+          studentId: gr.student_id,
+          subjectId: gr.subject_id,
+          semesterId: gr.semester_id,
+          classroomId: gr.classroom_id || gr.classroomid || mappedClassrooms[0]?.id || "",
+          rawScoreSum: Number(gr.raw_score_sum),
+          bonusScoreSum: Number(gr.bonus_score_sum),
+          totalScore: Number(gr.totalScore) || Number(gr.total_score) || 0,
+          grade: gr.grade,
+          gpaPoints: Number(gr.gpa_points),
+          isLocked: Boolean(gr.is_locked),
+          updatedAt: gr.updated_at,
+          updatedBy: gr.updated_by
+        }));
+
+        const curState = get();
+        const activeYear = (curState.activeAcademicYearId && mappedYears.some((y: any) => y.id === curState.activeAcademicYearId))
+          ? curState.activeAcademicYearId
+          : (mappedYears.find((y: any) => y.status === "active")?.id || mappedYears[0]?.id || "");
+
+        const activeSem = (curState.activeSemesterId && mappedSemesters.some((s: any) => s.id === curState.activeSemesterId))
+          ? curState.activeSemesterId
+          : (mappedSemesters.find((s: any) => s.status === "active" && s.academicYearId === activeYear)?.id || mappedSemesters[0]?.id || "");
+
+        const activeSub = (curState.activeSubjectId && mappedSubjects.some((s: any) => s.id === curState.activeSubjectId))
+          ? curState.activeSubjectId
+          : (mappedSubjects[0]?.id || "");
+
+        const subMatchedClass = mappedSubjects.find((s: any) => s.id === activeSub)?.classroomId ||
+          mappedComponents.find((c: any) => c.subjectId === activeSub)?.classroomId ||
+          mappedEnrollments.find((e: any) => e.subjectId === activeSub)?.classroomId;
+
+        const activeClass = subMatchedClass ||
+          ((curState.activeClassroomId && mappedClassrooms.some((c: any) => c.id === curState.activeClassroomId))
+            ? curState.activeClassroomId
+            : (mappedClassrooms[0]?.id || ""));
+
+        set({
+          activeSchoolId: mappedSchools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49",
+          activeAcademicYearId: activeYear,
+          activeSemesterId: activeSem,
+          activeClassroomId: activeClass,
+          activeSubjectId: activeSub,
+          mainTitle: mappedSchools[0]?.nameTh || "GradeD Portal",
+          subTitle: mappedSchools[0]?.nameEn || "ระบบบันทึกผลการเรียนและเช็คชื่อนักเรียน",
+          teacherName: "คุณครูผู้สอน",
+          teacherAvatar: null,
+          schoolLogo: mappedSchools[0]?.logoUrl || null,
+          schools: mappedSchools,
+          academicYears: mappedYears,
+          semesters: mappedSemesters,
+          classrooms: mappedClassrooms,
+          subjects: mappedSubjects,
+          students: mappedStudents,
+          enrollments: mappedEnrollments,
+          attendanceSessions: mappedSessions,
+          attendanceRecords: mappedRecords,
+          scoreComponents: mappedComponents,
+          scores: mappedScores,
+          bonusScores: mappedBonus,
+          gradeRules: mappedRule,
+          gradeResults: mappedResults,
+          currentAccountEmail: normalized,
+          isDataLoaded: true,
+          hasUnsavedChanges: false,
+          undoStack: [],
+          redoStack: []
+        });
+
+        get().calculateGrades();
+      } catch (e) {
+        console.error("Error loading directly from Supabase:", e);
+        set({ isDataLoaded: true, hasUnsavedChanges: false });
+      }
     },
 
     saveAccountData: async () => {
@@ -649,16 +656,6 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       if (!email || !state.isDataLoaded) return;
 
       set({ syncStatus: "saving", syncError: null });
-
-      try {
-        localStorage.setItem("graded_branding", JSON.stringify({
-          mainTitle: state.mainTitle,
-          subTitle: state.subTitle,
-          teacherName: state.teacherName,
-          teacherAvatar: state.teacherAvatar,
-          schoolLogo: state.schoolLogo
-        }));
-      } catch (e) {}
 
       try {
         const defaultSchoolId = state.activeSchoolId || state.schools[0]?.id || "f35acdc8-233d-b572-eedf-8f6d7da0ef49";

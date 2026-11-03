@@ -70,7 +70,7 @@ async function initAndPush() {
       name: "phanupmxd1-hub",
       email: "phanupmxd1@users.noreply.github.com"
     },
-    message: "Remove Firebase completely, use pure Supabase with full table sync"
+    message: "Fix score table student matching, remove classroom selector from header, remove local mock/db, sync pure Supabase"
   });
   console.log("Commit created:", sha);
 

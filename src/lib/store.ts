@@ -712,6 +712,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           const subRows = state.subjects.map(s => ({
             id: s.id && s.id.length === 36 ? s.id : generateUUID(),
             school_id: s.schoolId && s.schoolId.length === 36 ? s.schoolId : defaultSchoolId,
+            classroom_id: s.classroomId && s.classroomId.length === 36 ? s.classroomId : null,
             code: s.code,
             name: s.name,
             credit_points: Number(s.creditPoints) || 1.0,
@@ -1870,8 +1871,53 @@ export const useGMSStore = create<GMSState>()((set, get) => {
     },
 
     updateSubject: (subject) => {
-      set((state) => ({
+      const state = get();
+      const targetClassroomId = subject.classroomId;
+      const targetSemesterId = state.activeSemesterId || state.semesters[0]?.id;
+
+      // Update scoreComponents for this subject to match new classroomId
+      let updatedScoreComponents = state.scoreComponents.map(c => 
+        c.subjectId === subject.id && targetClassroomId 
+          ? { ...c, classroomId: targetClassroomId } 
+          : c
+      );
+
+      // If this subject doesn't have score components yet, create standard default 4 components
+      const hasComps = updatedScoreComponents.some(c => c.subjectId === subject.id);
+      if (!hasComps && targetClassroomId && targetSemesterId) {
+        updatedScoreComponents = [
+          ...updatedScoreComponents,
+          { id: generateUUID(), subjectId: subject.id, semesterId: targetSemesterId, classroomId: targetClassroomId, name: "ก่อนกลางภาค", type: "assignment", maxScore: 10, weightPercent: 10, order: 1 },
+          { id: generateUUID(), subjectId: subject.id, semesterId: targetSemesterId, classroomId: targetClassroomId, name: "กลางภาค", type: "exam", maxScore: 20, weightPercent: 20, order: 2 },
+          { id: generateUUID(), subjectId: subject.id, semesterId: targetSemesterId, classroomId: targetClassroomId, name: "หลังกลางภาค", type: "assignment", maxScore: 50, weightPercent: 50, order: 3 },
+          { id: generateUUID(), subjectId: subject.id, semesterId: targetSemesterId, classroomId: targetClassroomId, name: "ปลายภาค", type: "exam", maxScore: 20, weightPercent: 20, order: 4 }
+        ];
+      }
+
+      // Update enrollments
+      let updatedEnrollments = [...state.enrollments];
+      if (targetClassroomId && targetSemesterId) {
+        const studentsInClass = state.students.filter(s => s.classroomId === targetClassroomId);
+        studentsInClass.forEach(std => {
+          const alreadyEnrolled = updatedEnrollments.some(e => e.studentId === std.id && e.subjectId === subject.id);
+          if (!alreadyEnrolled) {
+            updatedEnrollments.push({
+              id: generateUUID(),
+              studentId: std.id,
+              subjectId: subject.id,
+              semesterId: targetSemesterId,
+              classroomId: targetClassroomId,
+              status: "active"
+            });
+          }
+        });
+      }
+
+      set({
         subjects: state.subjects.map(s => s.id === subject.id ? subject : s),
+        scoreComponents: updatedScoreComponents,
+        enrollments: updatedEnrollments,
+        activeClassroomId: state.activeSubjectId === subject.id && targetClassroomId ? targetClassroomId : state.activeClassroomId,
         hasUnsavedChanges: true,
         auditLogs: [
           ...state.auditLogs,
@@ -1881,11 +1927,11 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             action: "UPDATE",
             resourceType: "subject",
             resourceId: subject.id,
-            description: `แก้ไขข้อมูลรายวิชา ${subject.code} ${subject.name}`,
+            description: `แก้ไขข้อมูลรายวิชา ${subject.code} ${subject.name}${targetClassroomId ? ` (ห้อง ${state.classrooms.find(c => c.id === targetClassroomId)?.name || ""})` : ""}`,
             timestamp: new Date().toISOString()
           }
         ]
-      }));
+      });
     },
 
     deleteSubject: (id) => {

@@ -576,7 +576,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             </p>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (!newSubCode.trim() || !newSubName.trim()) return;
 
@@ -602,7 +602,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                 setNewSubCode("");
                 setNewSubName("");
                 setNewSubNewClassName("");
-                saveAccountData();
+                await saveAccountData();
               }}
               className="space-y-4"
             >

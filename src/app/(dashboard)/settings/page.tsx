@@ -352,7 +352,8 @@ export default function SettingsPage() {
     setEditingSubject(subject);
     const matchedClassId = subject.classroomId || 
       scoreComponents.find(c => c.subjectId === subject.id)?.classroomId ||
-      enrollments.find(e => e.subjectId === subject.id)?.classroomId || "";
+      enrollments.find(e => e.subjectId === subject.id)?.classroomId ||
+      (classrooms[0] ? classrooms[0].id : "");
     setSubClassroomId(matchedClassId);
     setSubNewClassName("");
     setSubCode(subject.code);
@@ -362,7 +363,7 @@ export default function SettingsPage() {
     setIsEditSubjectOpen(true);
   };
 
-  const handleSaveSubject = (e: React.FormEvent) => {
+  const handleSaveSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subCode.trim() || !subName.trim()) return;
 
@@ -373,12 +374,14 @@ export default function SettingsPage() {
         return;
       }
       finalClassId = addClassroom(subNewClassName.trim());
+    } else if (!finalClassId && classrooms.length > 0) {
+      finalClassId = classrooms[0].id;
     }
 
     if (isAddSubjectOpen) {
       addSubject(subCode.trim(), subName.trim(), subCredit, subHours, finalClassId);
       setIsAddSubjectOpen(false);
-      saveAccountData();
+      await saveAccountData();
       alert("เพิ่มวิชาเรียนใหม่สำเร็จ");
     } else if (isEditSubjectOpen && editingSubject) {
       updateSubject({
@@ -390,7 +393,7 @@ export default function SettingsPage() {
         classroomId: finalClassId || undefined
       });
       setIsEditSubjectOpen(false);
-      saveAccountData();
+      await saveAccountData();
       alert("แก้ไขข้อมูลวิชาเรียนสำเร็จ");
     }
   };
@@ -1138,7 +1141,7 @@ export default function SettingsPage() {
                 {classrooms.length > 0 ? (
                   <div className="space-y-2">
                     <select
-                      value={subClassroomId}
+                      value={subClassroomId || (classrooms[0] ? classrooms[0].id : "")}
                       onChange={(e) => setSubClassroomId(e.target.value)}
                       className="w-full rounded-2xl border border-border bg-background py-2 px-3 text-xs outline-none focus:border-emerald-500 text-foreground cursor-pointer font-bold"
                     >

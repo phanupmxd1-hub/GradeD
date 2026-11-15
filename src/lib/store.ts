@@ -370,6 +370,24 @@ export const useGMSStore = create<GMSState>()((set, get) => {
       set({ currentAccountEmail: normalized });
 
       try {
+        // Helper to fetch all rows with pagination to overcome Supabase 1,000 rows default limit
+        const fetchAllFromTable = async (tableName: string) => {
+          let allRows: any[] = [];
+          let from = 0;
+          while (true) {
+            const { data, error } = await supabase.from(tableName).select("*").range(from, from + 999);
+            if (error) {
+              console.error(`Error fetching ${tableName} at offset ${from}:`, error);
+              break;
+            }
+            if (!data || data.length === 0) break;
+            allRows.push(...data);
+            if (data.length < 1000) break;
+            from += 1000;
+          }
+          return allRows;
+        };
+
         const [
           schoolsRes,
           yearsRes,
@@ -386,23 +404,23 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           rulesRes,
           resultsRes
         ] = await Promise.all([
-          supabase.from("schools").select("*"),
-          supabase.from("academic_years").select("*"),
-          supabase.from("semesters").select("*"),
-          supabase.from("classrooms").select("*"),
-          supabase.from("subjects").select("*"),
-          supabase.from("students").select("*"),
-          supabase.from("enrollments").select("*"),
-          supabase.from("attendance_sessions").select("*"),
-          supabase.from("attendance_records").select("*"),
-          supabase.from("score_components").select("*"),
-          supabase.from("scores").select("*"),
-          supabase.from("bonus_scores").select("*"),
-          supabase.from("grade_rules").select("*"),
-          supabase.from("grade_results").select("*")
+          fetchAllFromTable("schools"),
+          fetchAllFromTable("academic_years"),
+          fetchAllFromTable("semesters"),
+          fetchAllFromTable("classrooms"),
+          fetchAllFromTable("subjects"),
+          fetchAllFromTable("students"),
+          fetchAllFromTable("enrollments"),
+          fetchAllFromTable("attendance_sessions"),
+          fetchAllFromTable("attendance_records"),
+          fetchAllFromTable("score_components"),
+          fetchAllFromTable("scores"),
+          fetchAllFromTable("bonus_scores"),
+          fetchAllFromTable("grade_rules"),
+          fetchAllFromTable("grade_results")
         ]);
 
-        const mappedSchools = (schoolsRes.data || []).map((s: any) => ({
+        const mappedSchools = schoolsRes.map((s: any) => ({
           id: s.id,
           nameTh: s.name_th,
           nameEn: s.name_en,
@@ -420,7 +438,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           });
         }
 
-        const mappedYears = (yearsRes.data || []).map((y: any) => ({
+        const mappedYears = yearsRes.map((y: any) => ({
           id: y.id,
           schoolId: y.school_id,
           year: Number(y.year),
@@ -436,7 +454,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           });
         }
 
-        const mappedSemesters: Semester[] = (semsRes.data || []).map((s: any) => ({
+        const mappedSemesters: Semester[] = semsRes.map((s: any) => ({
           id: s.id,
           academicYearId: s.academic_year_id,
           semesterNo: (Number(s.semester_no) === 2 ? 2 : 1) as 1 | 2,
@@ -450,7 +468,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           );
         }
 
-        const mappedClassrooms = (classesRes.data || []).map((c: any) => ({
+        const mappedClassrooms = classesRes.map((c: any) => ({
           id: c.id,
           schoolId: c.school_id,
           academicYearId: c.academic_year_id,
@@ -459,7 +477,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           studentCount: Number(c.student_count) || 0
         }));
 
-        const mappedSubjects: Subject[] = (subsRes.data || []).map((s: any) => ({
+        const mappedSubjects: Subject[] = subsRes.map((s: any) => ({
           id: s.id,
           schoolId: s.school_id,
           code: s.code,
@@ -469,7 +487,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           classroomId: s.classroom_id || undefined
         }));
 
-        const mappedStudents = (stdsRes.data || []).map((s: any) => ({
+        const mappedStudents = stdsRes.map((s: any) => ({
           id: s.id,
           schoolId: s.school_id,
           classroomId: s.classroom_id,
@@ -481,7 +499,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           status: s.status
         }));
 
-        const mappedEnrollments = (enrollsRes.data || []).map((e: any) => ({
+        const mappedEnrollments = enrollsRes.map((e: any) => ({
           id: e.id,
           studentId: e.student_id,
           subjectId: e.subject_id,
@@ -490,7 +508,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           status: e.status
         }));
 
-        const mappedSessions = (sessionsRes.data || []).map((s: any) => ({
+        const mappedSessions = sessionsRes.map((s: any) => ({
           id: s.id,
           schoolId: s.school_id,
           classroomId: s.classroom_id,
@@ -500,7 +518,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           sessionNo: s.session_no
         }));
 
-        const mappedRecords = (recordsRes.data || []).map((r: any) => ({
+        const mappedRecords = recordsRes.map((r: any) => ({
           id: r.id,
           sessionId: r.session_id,
           studentId: r.student_id,
@@ -510,7 +528,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           updatedBy: r.updated_by
         }));
 
-        let mappedComponents = (compsRes.data || []).map((c: any) => ({
+        let mappedComponents = compsRes.map((c: any) => ({
           id: c.id,
           subjectId: c.subject_id,
           semesterId: c.semester_id,
@@ -543,7 +561,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           mappedComponents = defaultComps;
         }
 
-        const mappedScores = (scoresRes.data || []).map((sc: any) => ({
+        const mappedScores = scoresRes.map((sc: any) => ({
           id: sc.id,
           studentId: sc.student_id,
           scoreComponentId: sc.score_component_id,
@@ -554,7 +572,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           updatedBy: sc.updated_by
         }));
 
-        const mappedBonus = (bonusRes.data || []).map((b: any) => ({
+        const mappedBonus = bonusRes.map((b: any) => ({
           id: b.id,
           studentId: b.student_id,
           subjectId: b.subject_id,
@@ -565,7 +583,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           createdBy: b.created_by
         }));
 
-        const rawRule = (rulesRes.data && rulesRes.data[0]) || null;
+        const rawRule = rulesRes[0] || null;
         const mappedRule = rawRule ? {
           id: rawRule.id,
           schoolId: rawRule.school_id,
@@ -573,7 +591,7 @@ export const useGMSStore = create<GMSState>()((set, get) => {
           ranges: Array.isArray(rawRule.ranges) ? rawRule.ranges : JSON.parse(rawRule.ranges || "[]")
         } : createDefaultInitialState().gradeRules;
 
-        const mappedResults = (resultsRes.data || []).map((gr: any) => ({
+        const mappedResults = resultsRes.map((gr: any) => ({
           id: gr.id,
           studentId: gr.student_id,
           subjectId: gr.subject_id,
@@ -653,7 +671,9 @@ export const useGMSStore = create<GMSState>()((set, get) => {
     saveAccountData: async () => {
       const state = get();
       const email = state.currentAccountEmail;
-      if (!email || !state.isDataLoaded) return;
+      if (!email || !state.isDataLoaded) {
+        console.warn("saveAccountData skipped: email=", email, "isDataLoaded=", state.isDataLoaded);
+      }
 
       set({ syncStatus: "saving", syncError: null });
 
@@ -669,7 +689,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             logo_url: idx === 0 ? (state.schoolLogo || s.logoUrl || null) : (s.logoUrl || null),
             status: s.status || "active"
           }));
-          await supabase.from("schools").upsert(schoolRows, { onConflict: "id" });
+          const { error } = await supabase.from("schools").upsert(schoolRows, { onConflict: "id" });
+          if (error) throw new Error(`บันทึกโรงเรียนไม่สำเร็จ: ${error.message}`);
         }
 
         // 2. Academic Years
@@ -680,7 +701,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             year: Number(y.year),
             status: y.status || "active"
           }));
-          await supabase.from("academic_years").upsert(yearRows, { onConflict: "id" });
+          const { error } = await supabase.from("academic_years").upsert(yearRows, { onConflict: "id" });
+          if (error) throw new Error(`บันทึกปีการศึกษาไม่สำเร็จ: ${error.message}`);
         }
 
         // 3. Semesters
@@ -691,7 +713,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             semester_no: Number(s.semesterNo),
             status: s.status || "active"
           }));
-          await supabase.from("semesters").upsert(semRows, { onConflict: "id" });
+          const { error } = await supabase.from("semesters").upsert(semRows, { onConflict: "id" });
+          if (error) throw new Error(`บันทึกภาคเรียนไม่สำเร็จ: ${error.message}`);
         }
 
         // 4. Classrooms
@@ -704,7 +727,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             teacher_id: null,
             student_count: Number(c.studentCount) || 0
           }));
-          await supabase.from("classrooms").upsert(classRows, { onConflict: "id" });
+          const { error } = await supabase.from("classrooms").upsert(classRows, { onConflict: "id" });
+          if (error) throw new Error(`บันทึกห้องเรียนไม่สำเร็จ: ${error.message}`);
         }
 
         // 5. Subjects
@@ -718,7 +742,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             credit_points: Number(s.creditPoints) || 1.0,
             hours_per_week: Number(s.hoursPerWeek) || 2
           }));
-          await supabase.from("subjects").upsert(subRows, { onConflict: "id" });
+          const { error } = await supabase.from("subjects").upsert(subRows, { onConflict: "id" });
+          if (error) throw new Error(`บันทึกวิชาไม่สำเร็จ: ${error.message}`);
         }
 
         // 6. Grade Rules
@@ -729,7 +754,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             subject_id: null,
             ranges: state.gradeRules.ranges || []
           };
-          await supabase.from("grade_rules").upsert(ruleRow, { onConflict: "id" });
+          const { error } = await supabase.from("grade_rules").upsert(ruleRow, { onConflict: "id" });
+          if (error) throw new Error(`บันทึกเกณฑ์เกรดไม่สำเร็จ: ${error.message}`);
         }
 
         // 7. Students
@@ -745,7 +771,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
             roll_no: Number(std.rollNo) || 1,
             status: std.status || "active"
           }));
-          await supabase.from("students").upsert(studentRows, { onConflict: "id" });
+          const { error } = await supabase.from("students").upsert(studentRows, { onConflict: "id" });
+          if (error) throw new Error(`บันทึกนักเรียนไม่สำเร็จ: ${error.message}`);
         }
 
         // 8. Enrollments
@@ -761,7 +788,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               status: e.status || "active"
             }));
           if (enrollRows.length > 0) {
-            await supabase.from("enrollments").upsert(enrollRows, { onConflict: "id" });
+            const { error } = await supabase.from("enrollments").upsert(enrollRows, { onConflict: "id" });
+            if (error) throw new Error(`บันทึกการลงทะเบียนไม่สำเร็จ: ${error.message}`);
           }
         }
 
@@ -781,7 +809,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               order_no: Number(c.order) || 1
             }));
           if (compRows.length > 0) {
-            await supabase.from("score_components").upsert(compRows, { onConflict: "id" });
+            const { error } = await supabase.from("score_components").upsert(compRows, { onConflict: "id" });
+            if (error) throw new Error(`บันทึกหัวข้อคะแนนไม่สำเร็จ: ${error.message}`);
           }
         }
 
@@ -799,7 +828,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               session_no: Number(ses.sessionNo) || 1
             }));
           if (sesRows.length > 0) {
-            await supabase.from("attendance_sessions").upsert(sesRows, { onConflict: "id" });
+            const { error } = await supabase.from("attendance_sessions").upsert(sesRows, { onConflict: "id" });
+            if (error) throw new Error(`บันทึกรอบเช็คชื่อไม่สำเร็จ: ${error.message}`);
           }
         }
 
@@ -816,11 +846,12 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               updated_at: r.updatedAt || new Date().toISOString()
             }));
           if (recordsToSave.length > 0) {
-            await supabase.from("attendance_records").upsert(recordsToSave, { onConflict: "session_id,student_id" });
+            const { error } = await supabase.from("attendance_records").upsert(recordsToSave, { onConflict: "session_id,student_id" });
+            if (error) throw new Error(`บันทึกรายการเช็คชื่อไม่สำเร็จ: ${error.message}`);
           }
         }
 
-        // 12. Scores
+        // 12. Scores (chunk in batches of 500 to ensure fast and reliable Supabase upserts)
         if (state.scores && state.scores.length > 0) {
           const scoresToSave = state.scores
             .filter(sc => sc.studentId && sc.scoreComponentId && sc.studentId.length === 36 && sc.scoreComponentId.length === 36)
@@ -834,7 +865,12 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               updated_at: sc.updatedAt || new Date().toISOString()
             }));
           if (scoresToSave.length > 0) {
-            await supabase.from("scores").upsert(scoresToSave, { onConflict: "student_id,score_component_id" });
+            const chunkSize = 500;
+            for (let i = 0; i < scoresToSave.length; i += chunkSize) {
+              const chunk = scoresToSave.slice(i, i + chunkSize);
+              const { error } = await supabase.from("scores").upsert(chunk, { onConflict: "student_id,score_component_id" });
+              if (error) throw new Error(`บันทึกคะแนนไม่สำเร็จ: ${error.message}`);
+            }
           }
         }
 
@@ -852,7 +888,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               created_at: b.timestamp || new Date().toISOString()
             }));
           if (bonusRows.length > 0) {
-            await supabase.from("bonus_scores").upsert(bonusRows, { onConflict: "id" });
+            const { error } = await supabase.from("bonus_scores").upsert(bonusRows, { onConflict: "id" });
+            if (error) throw new Error(`บันทึกคะแนนพฤติกรรมไม่สำเร็จ: ${error.message}`);
           }
         }
 
@@ -875,7 +912,8 @@ export const useGMSStore = create<GMSState>()((set, get) => {
               updated_at: gr.updatedAt || new Date().toISOString()
             }));
           if (resultsToSave.length > 0) {
-            await supabase.from("grade_results").upsert(resultsToSave, { onConflict: "student_id,subject_id,semester_id" });
+            const { error } = await supabase.from("grade_results").upsert(resultsToSave, { onConflict: "student_id,subject_id,semester_id" });
+            if (error) throw new Error(`บันทึกผลการเรียนไม่สำเร็จ: ${error.message}`);
           }
         }
 

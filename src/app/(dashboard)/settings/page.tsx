@@ -378,23 +378,28 @@ export default function SettingsPage() {
       finalClassId = classrooms[0].id;
     }
 
-    if (isAddSubjectOpen) {
-      addSubject(subCode.trim(), subName.trim(), subCredit, subHours, finalClassId);
-      setIsAddSubjectOpen(false);
-      await saveAccountData();
-      alert("เพิ่มวิชาเรียนใหม่สำเร็จ");
-    } else if (isEditSubjectOpen && editingSubject) {
-      updateSubject({
-        ...editingSubject,
-        code: subCode.trim(),
-        name: subName.trim(),
-        creditPoints: subCredit,
-        hoursPerWeek: subHours,
-        classroomId: finalClassId || undefined
-      });
-      setIsEditSubjectOpen(false);
-      await saveAccountData();
-      alert("แก้ไขข้อมูลวิชาเรียนสำเร็จ");
+    try {
+      if (isAddSubjectOpen) {
+        addSubject(subCode.trim(), subName.trim(), subCredit, subHours, finalClassId);
+        setIsAddSubjectOpen(false);
+        await saveAccountData();
+        alert("เพิ่มวิชาเรียนใหม่สำเร็จ");
+      } else if (isEditSubjectOpen && editingSubject) {
+        updateSubject({
+          ...editingSubject,
+          code: subCode.trim(),
+          name: subName.trim(),
+          creditPoints: subCredit,
+          hoursPerWeek: subHours,
+          classroomId: finalClassId || undefined
+        });
+        setIsEditSubjectOpen(false);
+        await saveAccountData();
+        alert("แก้ไขข้อมูลวิชาเรียนสำเร็จ");
+      }
+    } catch (err: any) {
+      console.error("Save subject error:", err);
+      alert(`เกิดข้อผิดพลาดในการบันทึก: ${err.message || "ไม่สามารถบันทึกข้อมูลวิชาได้"}`);
     }
   };
 

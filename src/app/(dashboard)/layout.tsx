@@ -78,6 +78,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     syncError,
     lastSavedTime,
     saveAccountData,
+    hasUnsavedChanges,
     mainTitle,
     subTitle,
     teacherName,
@@ -144,6 +145,33 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [saveAccountData]);
+
+  // Auto-save debounce effect: save changes to Cloud automatically after 3 seconds of inactivity
+  useEffect(() => {
+    if (!hasUnsavedChanges || syncStatus === "saving") return;
+
+    const timer = setTimeout(() => {
+      saveAccountData();
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [hasUnsavedChanges, syncStatus, saveAccountData]);
+
+  // Warn and attempt save before user closes or refreshes the tab if there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        saveAccountData();
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges, saveAccountData]);
 
   // Trigger recalculate grades once when selection changes to keep summaries updated
   useEffect(() => {
@@ -425,6 +453,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                     ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-600 dark:text-emerald-400"
                     : syncStatus === "error"
                     ? "bg-red-500/10 border-red-500/25 text-red-600 dark:text-red-400"
+                    : hasUnsavedChanges
+                    ? "bg-amber-600 border-amber-700 text-white hover:bg-amber-500 shadow-md shadow-amber-600/20 animate-pulse"
                     : "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-500 hover:border-emerald-600 shadow-md shadow-emerald-600/15"
                 }`}
                 title="บันทึกขึ้น Cloud ถาวร (คีย์ลัด Ctrl + S)"
@@ -448,6 +478,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                     ? "บันทึกสำเร็จ"
                     : syncStatus === "error"
                     ? "ล้มเหลว!"
+                    : hasUnsavedChanges
+                    ? "มีข้อมูลยังไม่เซฟ"
                     : "บันทึกข้อมูล"}
                 </span>
               </button>

@@ -16,7 +16,11 @@ import {
   UserPlus,
   Edit2,
   Users,
-  ChevronDown
+  ChevronDown,
+  GripVertical,
+  ArrowUpDown,
+  Save,
+  RotateCcw
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -32,7 +36,9 @@ export default function StudentsPage() {
     deleteStudent,
     bulkAddStudents,
     bulkMoveStudents,
-    promoteStudents
+    promoteStudents,
+    reorderStudents,
+    saveAccountData
   } = useGMSStore();
 
   // Selected students for bulk actions
@@ -62,12 +68,106 @@ export default function StudentsPage() {
   // Paste from Excel text state
   const [pastedData, setPastedData] = useState("");
 
+  // Reorder mode states
+  const [isReorderMode, setIsReorderMode] = useState(false);
+  const [reorderedList, setReorderedList] = useState<Student[]>([]);
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [isSavingReorder, setIsSavingReorder] = useState(false);
+
   // Filter students for the current classroom
   const activeStudents = useMemo(() => {
     return students
       .filter(s => s.classroomId === activeClassroomId)
       .sort((a, b) => a.rollNo - b.rollNo);
   }, [students, activeClassroomId]);
+
+  // Sync reorderedList when entering reorder mode or when activeStudents changes
+  React.useEffect(() => {
+    if (!isReorderMode) {
+      setReorderedList([...activeStudents]);
+    }
+  }, [activeStudents, isReorderMode]);
+
+  const handleToggleReorderMode = () => {
+    if (!isReorderMode) {
+      if (searchQuery.trim()) setSearchQuery(""); // Clear search to show all students
+      setReorderedList([...activeStudents]);
+      setIsReorderMode(true);
+    } else {
+      setIsReorderMode(false);
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+    }
+  };
+
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent<HTMLTableRowElement>, index: number) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLTableRowElement>, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverIdx !== index) {
+      setDragOverIdx(index);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIdx(null);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLTableRowElement>, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === dropIndex) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+
+    const updated = [...reorderedList];
+    const [movedItem] = updated.splice(draggedIdx, 1);
+    updated.splice(dropIndex, 0, movedItem);
+
+    setReorderedList(updated);
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  // Move up/down single step
+  const handleMoveStep = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= reorderedList.length) return;
+    const updated = [...reorderedList];
+    const [item] = updated.splice(fromIdx, 1);
+    updated.splice(toIdx, 0, item);
+    setReorderedList(updated);
+  };
+
+  // Save new order
+  const handleSaveReorder = async () => {
+    if (!activeClassroomId || reorderedList.length === 0) return;
+    setIsSavingReorder(true);
+    try {
+      const orderedIds = reorderedList.map(s => s.id);
+      reorderStudents(activeClassroomId, orderedIds);
+      await saveAccountData();
+      setIsReorderMode(false);
+      alert("บันทึกลำดับเลขที่นักเรียนเรียบร้อยแล้ว");
+    } catch (err: any) {
+      console.error(err);
+      alert("เกิดข้อผิดพลาดในการบันทึก: " + (err.message || ""));
+    } finally {
+      setIsSavingReorder(false);
+    }
+  };
 
   // Search filtered students
   const filteredStudents = useMemo(() => {
@@ -381,6 +481,19 @@ export default function StudentsPage() {
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={handleToggleReorderMode}
+            className={`flex items-center gap-1.5 rounded-2xl px-4 py-2.5 text-xs font-semibold active:scale-95 transition-all ${
+              isReorderMode
+                ? "bg-amber-600 hover:bg-amber-500 text-white shadow-md shadow-amber-600/20"
+                : "border border-border bg-card hover:bg-muted text-foreground"
+            }`}
+            title="เปิดโหมดลากเพื่อจัดเรียงลำดับเลขที่นักเรียนใหม่"
+          >
+            <ArrowUpDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            {isReorderMode ? "ออกจากโหมดจัดเรียง" : "จัดเรียงเลขที่ (ลากสลับ)"}
+          </button>
+
+          <button
             onClick={handleOpenAdd}
             className="flex items-center gap-1.5 rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md hover:bg-emerald-500 active:scale-95 transition-all"
           >
@@ -418,147 +531,304 @@ export default function StudentsPage() {
       {/* Main Student Panel */}
       <div className="rounded-3xl border border-border bg-card/65 backdrop-blur-md overflow-hidden">
         
-        {/* Table Filter Options Bar */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-b border-border">
-          <div className="relative w-full sm:max-w-xs">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="ค้นหานักเรียนด้วยชื่อ หรือ เลขประจำตัว..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-2xl border border-border bg-background py-2 pr-4 pl-9 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all"
-            />
-          </div>
-
-          {/* Selection Actions */}
-          {selectedIds.length > 0 && (
-            <div className="flex items-center gap-2 w-full sm:w-auto bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-2xl animate-in fade-in slide-in-from-top-1 duration-200">
-              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mr-2">
-                เลือกแล้ว {selectedIds.length} คน
+        {/* Table Filter Options Bar / Reorder Bar */}
+        {isReorderMode ? (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-amber-500/10 border-b border-amber-500/20 text-amber-900 dark:text-amber-200">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-500 text-white font-bold text-xs shadow-sm">
+                <GripVertical className="h-4 w-4" />
               </span>
+              <div>
+                <p className="text-xs font-bold text-foreground">
+                  โหมดจัดเรียงลำดับเลขที่ (ลากสลับตำแหน่งได้ทันที)
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  คลิกลากแถว หรือกดปุ่มลูกศรขึ้น/ลง เพื่อสลับลำดับ จากนั้นกด &quot;บันทึกลำดับเลขที่&quot;
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <button
-                onClick={() => {
-                  setBulkActionType("move");
-                  setIsBulkOpen(true);
-                }}
-                className="flex items-center gap-1.5 rounded-xl bg-card border border-border px-3 py-1.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all"
+                type="button"
+                onClick={() => setReorderedList([...activeStudents])}
+                disabled={isSavingReorder}
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all"
               >
-                <Shuffle className="h-3.5 w-3.5" />
-                ย้ายห้อง
+                <RotateCcw className="h-3.5 w-3.5" />
+                รีเซ็ต
               </button>
               <button
-                onClick={() => {
-                  setBulkActionType("promote");
-                  setIsBulkOpen(true);
-                }}
-                className="flex items-center gap-1.5 rounded-xl bg-card border border-border px-3 py-1.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all"
+                type="button"
+                onClick={handleToggleReorderMode}
+                disabled={isSavingReorder}
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold hover:bg-muted text-foreground transition-all"
               >
-                <ArrowUpCircle className="h-3.5 w-3.5" />
-                เลื่อนระดับชั้น
+                ยกเลิก
               </button>
               <button
-                onClick={() => {
-                  setBulkActionType("delete");
-                  handleExecuteBulkAction();
-                }}
-                className="flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 px-3 py-1.5 text-xs font-semibold hover:bg-red-500/20 active:scale-95 transition-all"
+                type="button"
+                onClick={handleSaveReorder}
+                disabled={isSavingReorder}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 transition-all disabled:opacity-50"
               >
-                <Trash2 className="h-3.5 w-3.5" />
-                ลบกลุ่มนี้
+                <Save className="h-3.5 w-3.5" />
+                {isSavingReorder ? "กำลังบันทึก..." : "บันทึกลำดับเลขที่"}
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-b border-border">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="ค้นหานักเรียนด้วยชื่อ หรือ เลขประจำตัว..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-2xl border border-border bg-background py-2 pr-4 pl-9 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all"
+              />
+            </div>
+
+            {/* Selection Actions */}
+            {selectedIds.length > 0 && (
+              <div className="flex items-center gap-2 w-full sm:w-auto bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-2xl animate-in fade-in slide-in-from-top-1 duration-200">
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mr-2">
+                  เลือกแล้ว {selectedIds.length} คน
+                </span>
+                <button
+                  onClick={() => {
+                    setBulkActionType("move");
+                    setIsBulkOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl bg-card border border-border px-3 py-1.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all"
+                >
+                  <Shuffle className="h-3.5 w-3.5" />
+                  ย้ายห้อง
+                </button>
+                <button
+                  onClick={() => {
+                    setBulkActionType("promote");
+                    setIsBulkOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl bg-card border border-border px-3 py-1.5 text-xs font-semibold hover:bg-muted active:scale-95 transition-all"
+                >
+                  <ArrowUpCircle className="h-3.5 w-3.5" />
+                  เลื่อนระดับชั้น
+                </button>
+                <button
+                  onClick={() => {
+                    setBulkActionType("delete");
+                    handleExecuteBulkAction();
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 px-3 py-1.5 text-xs font-semibold hover:bg-red-500/20 active:scale-95 transition-all"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  ลบกลุ่มนี้
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Data Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/50 text-xs font-bold uppercase tracking-wider text-muted-foreground border-b border-border">
               <tr>
-                <th className="p-4 w-12 text-center">
-                  <input
-                    type="checkbox"
-                    checked={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
-                  />
-                </th>
-                <th className="p-4 w-20 text-center">เลขที่</th>
-                <th className="p-4 w-32">เลขประจำตัว</th>
-                <th className="p-4">คำนำหน้า</th>
-                <th className="p-4">ชื่อจริง</th>
-                <th className="p-4">นามสกุล</th>
-                <th className="p-4 w-20 text-center">เพศ</th>
-                <th className="p-4 w-32">สถานะ</th>
-                <th className="p-4 w-28 text-center">จัดการ</th>
+                {isReorderMode ? (
+                  <>
+                    <th className="p-4 w-14 text-center">ลาก</th>
+                    <th className="p-4 w-24 text-center">ลำดับใหม่</th>
+                    <th className="p-4 w-28 text-center">เลขที่เดิม</th>
+                    <th className="p-4">คำนำหน้า</th>
+                    <th className="p-4">ชื่อจริง</th>
+                    <th className="p-4">นามสกุล</th>
+                    <th className="p-4 w-24 text-center">เพศ</th>
+                    <th className="p-4 w-32 text-center">ปรับเลื่อน</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="p-4 w-12 text-center">
+                      <input
+                        type="checkbox"
+                        checked={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                      />
+                    </th>
+                    <th className="p-4 w-20 text-center">เลขที่</th>
+                    <th className="p-4 w-32">เลขประจำตัว</th>
+                    <th className="p-4">คำนำหน้า</th>
+                    <th className="p-4">ชื่อจริง</th>
+                    <th className="p-4">นามสกุล</th>
+                    <th className="p-4 w-20 text-center">เพศ</th>
+                    <th className="p-4 w-32">สถานะ</th>
+                    <th className="p-4 w-28 text-center">จัดการ</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {filteredStudents.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="p-12 text-center text-muted-foreground">
-                    <div className="flex flex-col items-center gap-2">
-                      <Users className="h-10 w-10 text-muted-foreground/40" />
-                      <p className="font-semibold text-sm">ไม่พบรายชื่อนักเรียนในห้องเรียนนี้</p>
-                      <p className="text-xs">กรุณากดปุ่มเพิ่มนักเรียน หรือ นำเข้าไฟล์จากแถบเครื่องมือด้านบน</p>
-                    </div>
-                  </td>
-                </tr>
+              {isReorderMode ? (
+                reorderedList.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-12 text-center text-muted-foreground">
+                      <p className="font-semibold text-sm">ไม่พบรายชื่อนักเรียนในห้องนี้</p>
+                    </td>
+                  </tr>
+                ) : (
+                  reorderedList.map((student, idx) => {
+                    const isDragging = draggedIdx === idx;
+                    const isOver = dragOverIdx === idx;
+                    const isChanged = student.rollNo !== idx + 1;
+
+                    return (
+                      <tr
+                        key={student.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, idx)}
+                        onDragOver={(e) => handleDragOver(e, idx)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, idx)}
+                        onDragEnd={handleDragEnd}
+                        className={`transition-all select-none cursor-grab active:cursor-grabbing ${
+                          isDragging
+                            ? "opacity-35 bg-muted"
+                            : isOver
+                            ? "bg-amber-500/20 border-t-2 border-amber-500"
+                            : "hover:bg-muted/30"
+                        } ${isChanged ? "bg-amber-500/5" : ""}`}
+                      >
+                        <td className="p-4 text-center text-muted-foreground">
+                          <GripVertical className="h-5 w-5 mx-auto text-muted-foreground hover:text-foreground cursor-grab" />
+                        </td>
+                        <td className="p-4 text-center">
+                          <span
+                            className={`inline-flex items-center justify-center h-7 w-7 rounded-xl font-bold text-xs shadow-sm ${
+                              isChanged
+                                ? "bg-amber-500 text-white font-extrabold ring-2 ring-amber-500/30"
+                                : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                            }`}
+                          >
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center font-mono text-xs text-muted-foreground">
+                          {student.rollNo}
+                        </td>
+                        <td className="p-4 text-foreground">{student.prefix}</td>
+                        <td className="p-4 font-semibold text-foreground">{student.firstName}</td>
+                        <td className="p-4 text-foreground">{student.lastName}</td>
+                        <td className="p-4 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                              student.gender === "M"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                                : "bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300"
+                            }`}
+                          >
+                            {student.gender === "M" ? "ชาย" : "หญิง"}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveStep(idx, idx - 1);
+                              }}
+                              disabled={idx === 0}
+                              className="px-2 py-1 rounded-lg border border-border bg-card hover:bg-muted text-xs disabled:opacity-30 disabled:pointer-events-none"
+                              title="เลื่อนขึ้น"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveStep(idx, idx + 1);
+                              }}
+                              disabled={idx === reorderedList.length - 1}
+                              className="px-2 py-1 rounded-lg border border-border bg-card hover:bg-muted text-xs disabled:opacity-30 disabled:pointer-events-none"
+                              title="เลื่อนลง"
+                            >
+                              ▼
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )
               ) : (
-                filteredStudents.map((student) => (
-                  <tr 
-                    key={student.id} 
-                    className={`hover:bg-muted/30 transition-colors ${selectedIds.includes(student.id) ? "bg-emerald-500/5 dark:bg-emerald-500/10" : ""}`}
-                  >
-                    <td className="p-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(student.id)}
-                        onChange={(e) => handleSelectOne(student.id, e.target.checked)}
-                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
-                      />
-                    </td>
-                    <td className="p-4 text-center font-semibold text-foreground">{student.rollNo}</td>
-                    <td className="p-4 font-mono text-xs text-muted-foreground">{student.id.substring(student.id.lastIndexOf("-") + 1)}</td>
-                    <td className="p-4 text-foreground">{student.prefix}</td>
-                    <td className="p-4 font-semibold text-foreground">{student.firstName}</td>
-                    <td className="p-4 text-foreground">{student.lastName}</td>
-                    <td className="p-4 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${student.gender === "M" ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" : "bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300"}`}>
-                        {student.gender === "M" ? "ชาย" : "หญิง"}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        student.status === "active" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400" : 
-                        student.status === "dropped" ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400" : 
-                        "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
-                      }`}>
-                        {student.status === "active" ? "ปกติ" : 
-                         student.status === "dropped" ? "จำหน่ายออก" : "ย้ายสถานศึกษา"}
-                      </span>
-                    </td>
-                    <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => handleOpenEdit(student)}
-                          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                          title="แก้ไขประวัตินักเรียน"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(student.id)}
-                          className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
-                          title="ลบรายชื่อนักเรียน"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                filteredStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Users className="h-10 w-10 text-muted-foreground/40" />
+                        <p className="font-semibold text-sm">ไม่พบรายชื่อนักเรียนในห้องเรียนนี้</p>
+                        <p className="text-xs">กรุณากดปุ่มเพิ่มนักเรียน หรือ นำเข้าไฟล์จากแถบเครื่องมือด้านบน</p>
                       </div>
                     </td>
                   </tr>
-                ))
+                ) : (
+                  filteredStudents.map((student) => (
+                    <tr 
+                      key={student.id} 
+                      className={`hover:bg-muted/30 transition-colors ${selectedIds.includes(student.id) ? "bg-emerald-500/5 dark:bg-emerald-500/10" : ""}`}
+                    >
+                      <td className="p-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(student.id)}
+                          onChange={(e) => handleSelectOne(student.id, e.target.checked)}
+                          className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                        />
+                      </td>
+                      <td className="p-4 text-center font-semibold text-foreground">{student.rollNo}</td>
+                      <td className="p-4 font-mono text-xs text-muted-foreground">{student.id.substring(student.id.lastIndexOf("-") + 1)}</td>
+                      <td className="p-4 text-foreground">{student.prefix}</td>
+                      <td className="p-4 font-semibold text-foreground">{student.firstName}</td>
+                      <td className="p-4 text-foreground">{student.lastName}</td>
+                      <td className="p-4 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${student.gender === "M" ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" : "bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300"}`}>
+                          {student.gender === "M" ? "ชาย" : "หญิง"}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          student.status === "active" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400" : 
+                          student.status === "dropped" ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400" : 
+                          "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
+                        }`}>
+                          {student.status === "active" ? "ปกติ" : 
+                           student.status === "dropped" ? "จำหน่ายออก" : "ย้ายสถานศึกษา"}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(student)}
+                            className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                            title="แก้ไขประวัตินักเรียน"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(student.id)}
+                            className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-red-500 transition-colors"
+                            title="ลบรายชื่อนักเรียน"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )
               )}
             </tbody>
           </table>

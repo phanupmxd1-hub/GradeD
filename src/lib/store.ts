@@ -289,6 +289,7 @@ interface GMSState {
   bulkAddStudents: (students: Omit<Student, "id" | "schoolId" | "classroomId">[]) => void;
   bulkMoveStudents: (studentIds: string[], targetClassroomId: string) => void;
   promoteStudents: (studentIds: string[], targetClassroomId: string) => void;
+  reorderStudents: (classroomId: string, orderedStudentIds: string[]) => void;
 
   createAttendanceSession: (date: string, sessionNo: number) => string;
   updateAttendanceRecord: (sessionId: string, studentId: string, status: "มา" | "ลา" | "ขาด" | "สาย" | "หยุด", remarks?: string) => void;
@@ -1202,6 +1203,38 @@ export const useGMSStore = create<GMSState>()((set, get) => {
 
     promoteStudents: (studentIds, targetClassroomId) => {
       get().bulkMoveStudents(studentIds, targetClassroomId);
+    },
+
+    reorderStudents: (classroomId, orderedStudentIds) => {
+      const state = get();
+      const idToNewRoll = new Map<string, number>();
+      orderedStudentIds.forEach((id, index) => {
+        idToNewRoll.set(id, index + 1);
+      });
+
+      const updatedStudents = state.students.map(s => {
+        if (s.classroomId === classroomId && idToNewRoll.has(s.id)) {
+          return { ...s, rollNo: idToNewRoll.get(s.id)! };
+        }
+        return s;
+      });
+
+      set({
+        students: updatedStudents,
+        hasUnsavedChanges: true,
+        auditLogs: [
+          ...state.auditLogs,
+          {
+            id: generateUUID(),
+            userId: "mock-teacher-id-1",
+            action: "UPDATE",
+            resourceType: "student",
+            resourceId: classroomId,
+            description: `จัดเรียงลำดับเลขที่นักเรียนห้อง ${state.classrooms.find(c => c.id === classroomId)?.name || ""}`,
+            timestamp: new Date().toISOString()
+          }
+        ]
+      });
     },
 
     createAttendanceSession: (date, sessionNo) => {
